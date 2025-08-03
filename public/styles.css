@@ -36,7 +36,7 @@ h1, h2, h3 {
 
 .logo-heading {
   display: flex;
-  align-items: center;
+  align-items: right;
   justify-content: space-between;
   width: 100%;
 }

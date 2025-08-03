@@ -21,7 +21,7 @@ h1, h2, h3 {
 /* Header */
 .header {
   background: linear-gradient(to right, #0b0d12, #151925);
-  padding: 3rem 0;
+  padding: 2rem 0;
 }
 
 /* Flex Layout for Logo + Heading */

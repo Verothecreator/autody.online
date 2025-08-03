@@ -4,7 +4,7 @@ const GRAPH_URL = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2";
 async function fetchPairDayData(pairAddress) {
   const query = `
     query ($pair: Bytes!) {
-      pairDayDatas(first: 30, orderBy: date, orderDirection: asc, where: {pairAddress: $pair}) {
+      pairDayDatas(first: 30, orderBy: date, orderDirection: asc, where: {pair: $pair}) {
         date
         token0Price
         token1Price

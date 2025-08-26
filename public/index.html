@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Autody Token Sale</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="https://global.transak.com/sdk/v1.1/widget.js"></script>
-  <script src="main.js"></script>
 </head>
 <body>
   <header class="header">
@@ -95,27 +93,29 @@
       <p>&copy; 2025 Autody. All rights reserved.</p>
     </div>
   </footer>
-</body>
-<!-- Buy Card Popup (hidden by default) -->
-<div id="buy-card-popup" class="popup-overlay">
-  <div class="popup-content">
-    <span id="close-popup" class="close-btn">&times;</span>
-
-    <div class="buy-card">
-      <h2>Buy Autody with USD</h2>
-      <p>Use your debit card, credit card, or bank transfer to get AUTODY.</p>
-      
-      <input type="text" id="usdAmount" placeholder="Enter USD Amount">
-      <input type="text" id="tokenAmount" placeholder="AUTODY (calculated)" disabled>
-      
-      <button class="wallet-btn">Connect Wallet</button>
-      <button class="buy-btn" id="buy-autody-btn">Buy Now</button>
-      
-      <p class="secure">
-        🔒 Secure payment powered by Transak.<br>
-        We do not store your card or wallet details.
-      </p>
+  <!-- Buy Card Popup (hidden by default) -->
+  <div id="buy-card-popup" class="popup-overlay">
+    <div class="popup-content">
+      <span id="close-popup" class="close-btn">&times;</span>
+  
+      <div class="buy-card">
+        <h2>Buy Autody with USD</h2>
+        <p>Use your debit card, credit card, or bank transfer to get AUTODY.</p>
+        
+        <input type="text" id="usdAmount" placeholder="Enter USD Amount">
+        <input type="text" id="tokenAmount" placeholder="AUTODY (calculated)" disabled>
+        
+        <button class="wallet-btn">Connect Wallet</button>
+        <button class="buy-btn" id="buy-autody-btn">Buy Now</button>
+        
+        <p class="secure">
+          🔒 Secure payment powered by Transak.<br>
+          We do not store your card or wallet details.
+        </p>
+      </div>
     </div>
   </div>
-</div>
+  <script src="https://global.transak.com/sdk/v1.1/widget.js"></script>
+  <script src="main.js"></script>
+</body>
 </html>

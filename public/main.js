@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function launchTransak() {
-  const transak = new TransakSDK({
+  const transak = new TransakSDK.default({
     apiKey: 'abb84712-113f-4bc5-9e4a-53495a966676',
     environment: 'STAGING',
     defaultCryptoCurrency: 'AUTODY',

@@ -101,13 +101,20 @@
       <div class="buy-card">
         <h2>Buy Autody with USD</h2>
         <p>Use your debit card, credit card, or bank transfer to get AUTODY.</p>
-        
-        <input type="text" id="usdAmount" placeholder="Enter USD Amount">
-        <input type="text" id="tokenAmount" placeholder="AUTODY (calculated)" disabled>
-        
+  
+        <div class="form-group">
+          <label for="usdAmount">USD</label>
+          <input type="text" id="usdAmount" value="$50.00" readonly>
+        </div>
+  
+        <div class="form-group">
+          <label for="tokenAmount">AUTODY</label>
+          <input type="text" id="tokenAmount" value="100.00" readonly>
+        </div>
+  
         <button class="wallet-btn">Connect Wallet</button>
         <button class="buy-btn" id="buy-autody-btn">Buy Now</button>
-        
+  
         <p class="secure">
           🔒 Secure payment powered by Transak.<br>
           We do not store your card or wallet details.

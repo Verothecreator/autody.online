@@ -318,3 +318,14 @@ h1, h2, h3 {
   from { transform: translateY(-30px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
+
+/* Force dark text inside popup */
+.popup-content, 
+.popup-content h2,
+.popup-content p,
+.popup-content label,
+.popup-content input,
+.popup-content .secure {
+  color: #111; /* or #000 for pure black */
+}
+

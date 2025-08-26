@@ -1,40 +1,45 @@
-// main.js
+document.addEventListener("DOMContentLoaded", () => {
+  const openBtn = document.getElementById("open-buy-card-btn");
+  const popup = document.getElementById("buy-card-popup");
+  const closeBtn = document.getElementById("close-popup");
+  const buyNowBtn = document.getElementById("buy-autody-btn");
 
-// Attach event listener to Buy Autody button
-document.addEventListener("DOMContentLoaded", function () {
-  const buyButton = document.getElementById("buy-autody-btn");
+  // Open popup when "Buy Autody" is clicked
+  openBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    popup.style.display = "flex";
+  });
 
-  if (buyButton) {
-    buyButton.addEventListener("click", function (e) {
-      e.preventDefault();
-      launchTransak();
-    });
-  }
+  // Close popup
+  closeBtn.addEventListener("click", () => {
+    popup.style.display = "none";
+  });
+
+  // Close if clicking outside the popup content
+  popup.addEventListener("click", (e) => {
+    if (e.target === popup) {
+      popup.style.display = "none";
+    }
+  });
+
+  // Trigger Transak when "Buy Now" inside popup is clicked
+  buyNowBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    launchTransak();
+  });
 });
 
-// Function to launch Transak widget
 function launchTransak() {
   const transak = new TransakSDK({
-    apiKey: 'abb84712-113f-4bc5-9e4a-53495a966676', // your partner API key
-    environment: 'STAGING', // use 'PRODUCTION' when live
-    defaultCryptoCurrency: 'AUTODY', // token symbol
+    apiKey: 'abb84712-113f-4bc5-9e4a-53495a966676',
+    environment: 'STAGING',
+    defaultCryptoCurrency: 'AUTODY',
     fiatCurrency: 'USD',
-    walletAddress: '0xUSER_WALLET_ADDRESS', // replace or inject dynamically from wallet connect
+    walletAddress: '0xUSER_WALLET_ADDRESS',
     themeColor: '007bff',
     hostURL: window.location.origin,
     redirectURL: window.location.href,
   });
 
   transak.init();
-
-  // Optional: listen for events
-  transak.on(transak.ALL_EVENTS, (data) => {
-    console.log("Transak Event:", data);
-  });
-
-  transak.on(transak.EVENTS.TRANSAK_ORDER_SUCCESSFUL, (orderData) => {
-    console.log("Order Successful:", orderData);
-    alert("✅ Purchase successful! AUTODY will arrive in your wallet.");
-    transak.close();
-  });
 }

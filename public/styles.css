@@ -271,9 +271,13 @@ h1, h2, h3 {
 }
 
 .buy-card input {
-  display: block;
-  width: 100%;         /* stretch full width */
-  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  font-size: 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fafafa;
+  text-align: center;
 }
 
 /* Buttons */

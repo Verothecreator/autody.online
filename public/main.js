@@ -1,3 +1,4 @@
+
 document.addEventListener("DOMContentLoaded", () => {
   const openBtn = document.getElementById("open-buy-card-btn");
   const popup = document.getElementById("buy-card-popup");
@@ -91,4 +92,3 @@ setInterval(async () => {
     tokenInput.value = autodyValue.toFixed(2);
   }
 }, 15000);
-

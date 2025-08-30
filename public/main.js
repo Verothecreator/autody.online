@@ -31,7 +31,7 @@ function launchTransak() {
     environment: "STAGING",
     defaultCryptoCurrency: "AUTODY",
     fiatCurrency: "USD",
-    walletAddress: window.localStorage.getItem("autodyWallet") || "",
+    walletAddress: "0xUSER_WALLET_ADDRESS", // replace later
     themeColor: "007bff",
     hostURL: window.location.origin,
     redirectURL: window.location.href,
@@ -166,51 +166,3 @@ setInterval(async () => {
 async function warmPriceCache() {
   await getAutodyPriceUSD();
 }
-
-// ---------------------------
-// Wallet Connect Integration
-// ---------------------------
-import { EthereumClient, w3mConnectors, w3mProvider } from "@web3modal/ethereum";
-import { Web3Modal } from "@web3modal/html";
-
-// 1. Your project ID from WalletConnect Cloud (free signup at https://cloud.walletconnect.com)
-const projectId = "YOUR_WALLETCONNECT_PROJECT_ID";  
-
-// 2. Ethereum chains you support (Autody is on Ethereum first)
-const chains = [{
-  id: 1,
-  name: "Ethereum",
-  network: "mainnet",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: ["https://eth.llamarpc.com"] // reliable free RPC
-}];
-
-// 3. Ethereum client
-const ethereumClient = new EthereumClient(w3mConnectors({ projectId, version: 2 }), w3mProvider({ projectId }), chains);
-
-// 4. Modal instance
-const web3modal = new Web3Modal({ projectId }, ethereumClient);
-
-// ---------------------------
-// Connect Wallet Button Logic
-// ---------------------------
-const connectBtn = document.getElementById("connectWalletBtn");
-const walletDisplay = document.getElementById("walletAddressDisplay");
-
-connectBtn.addEventListener("click", async () => {
-  try {
-    await web3modal.openModal(); // opens modal (like your picture)
-    
-    // After connect, get signer
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const address = await signer.getAddress();
-
-    walletDisplay.innerText = `Connected: ${address}`;
-    
-    // Optional: inject into Transak
-    window.localStorage.setItem("autodyWallet", address);
-  } catch (err) {
-    console.error("Wallet connection failed:", err);
-  }
-});

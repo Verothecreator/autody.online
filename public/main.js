@@ -31,7 +31,7 @@ function launchTransak() {
     environment: "STAGING",
     defaultCryptoCurrency: "AUTODY",
     fiatCurrency: "USD",
-    walletAddress: "0xUSER_WALLET_ADDRESS", // replace later
+    walletAddress: window.localStorage.getItem("autodyWallet") || "",
     themeColor: "007bff",
     hostURL: window.location.origin,
     redirectURL: window.location.href,

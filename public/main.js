@@ -129,7 +129,7 @@ async function ensureWalletConnectReady() {
   }
   if (!wcUniversalProvider) {
     wcUniversalProvider = await Universal.init({
-      projectId: "YOUR_PROJECT_ID", // 👉 get from https://cloud.walletconnect.com
+      projectId: "69e2560c7b637bd282fec177545d8036", // 👉 get from https://cloud.walletconnect.com
       metadata: {
         name: "Autody",
         description: "Autody Token Sale",
@@ -140,7 +140,7 @@ async function ensureWalletConnectReady() {
   }
   if (!wcModal) {
     wcModal = new ModalLib({
-      projectId: "YOUR_PROJECT_ID",
+      projectId: "69e2560c7b637bd282fec177545d8036",
       themeMode: "light",
       // optional: stack above your popup
       themeVariables: { "--wcm-z-index": "3000" }

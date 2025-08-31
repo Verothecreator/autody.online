@@ -10,12 +10,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const openWallets  = document.getElementById("open-wallets");
   const walletDisplay= document.getElementById("walletAddressDisplay");
 
-  // --- EIP-6963 Provider Discovery (multi-injected detection) ---
+  // --- EIP-6963 Provider Discovery (robust multi-injected detection) ---
   const discoveredProviders = [];
   window.addEventListener("eip6963:announceProvider", (event) => {
     const { info, provider } = event.detail;
     discoveredProviders.push({ info, provider });
   });
+  // Ask wallets to announce themselves
   window.dispatchEvent(new Event("eip6963:requestProvider"));
 
   // Open popup
@@ -42,15 +43,16 @@ document.addEventListener("DOMContentLoaded", () => {
     launchTransak();
   });
 
-  // Wallet connect logic
+  // Wallet connect logic (per-button)
   document.querySelectorAll(".wallet-option").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      const type = btn.dataset.wallet;
+      const type = btn.dataset.wallet; // metamask | coinbase | blockchain | trust | ledger | walletconnect
       try {
         const address = await connectWallet(type, discoveredProviders);
         if (address) {
           walletDisplay.innerText = `Connected: ${address}`;
           window.localStorage.setItem("autodyWallet", address);
+          // Auto-return to buy step
           walletStep.style.display = "none";
           buyStep.style.display = "block";
         }
@@ -63,16 +65,23 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ---------------------------
-   Injected provider detection
+   Wallet selection helpers
 --------------------------- */
+
+// Try to find the exact injected provider for the chosen wallet using EIP-6963 info.name,
+// then fall back to window.ethereum.providers flags.
+// If nothing found for that specific wallet, we return null (caller will use WalletConnect).
 function findInjectedFor(type, discoveredProviders) {
+  // Name matches (EIP-6963)
   const NAME_MAP = {
     metamask:   ["MetaMask"],
     coinbase:   ["Coinbase Wallet", "Coinbase"],
-    blockchain: ["Blockchain.com", "Blockchain Wallet"],
+    blockchain: ["Blockchain.com", "Blockchain.com Wallet", "Blockchain Wallet"],
     trust:      ["Trust Wallet", "Trust"],
     ledger:     ["Ledger", "Ledger Live"]
   };
+
+  // Flag checks (legacy)
   const FLAG_CHECK = {
     metamask:   (p) => p.isMetaMask,
     coinbase:   (p) => p.isCoinbaseWallet,
@@ -81,6 +90,7 @@ function findInjectedFor(type, discoveredProviders) {
     ledger:     (p) => p.isLedger || p.isLedgerLive
   };
 
+  // 1) Try EIP-6963 discovered providers by name
   const wantedNames = NAME_MAP[type] || [];
   for (const { info, provider } of discoveredProviders) {
     if (info?.name && wantedNames.some(n => info.name.toLowerCase().includes(n.toLowerCase()))) {
@@ -88,6 +98,7 @@ function findInjectedFor(type, discoveredProviders) {
     }
   }
 
+  // 2) Try flags on window.ethereum/providers
   const eth = window.ethereum;
   if (!eth) return null;
   const candidates = Array.isArray(eth.providers) && eth.providers.length ? eth.providers : [eth];
@@ -104,19 +115,21 @@ async function connectViaInjected(injectedProvider) {
 }
 
 /* ---------------------------
-   WalletConnect QR
+   WalletConnect (QR) setup
 --------------------------- */
-let wcProvider = null;
+let wcUniversalProvider = null;
+let wcModal = null;
 
-async function connectViaWalletConnect() {
-  if (!window.WalletConnectProvider) {
-    throw new Error("WalletConnect script not loaded. Make sure ethereum-provider is included.");
+async function ensureWalletConnectReady() {
+  // UMD globals provided by the <script> tags:
+  const Universal = window.WalletConnectUniversalProvider;
+  const ModalLib  = window.WalletConnectModal;
+  if (!Universal || !ModalLib) {
+    throw new Error("WalletConnect scripts not loaded. Make sure the 2 <script> tags are included.");
   }
-  if (!wcProvider) {
-    wcProvider = await window.WalletConnectProvider.init({
-      projectId: "YOUR_PROJECT_ID", // replace with your WalletConnect Cloud projectId
-      chains: [1], // Ethereum mainnet
-      showQrModal: true,
+  if (!wcUniversalProvider) {
+    wcUniversalProvider = await Universal.init({
+      projectId: "69e2560c7b637bd282fec177545d8036", // 👉 get from https://cloud.walletconnect.com
       metadata: {
         name: "Autody",
         description: "Autody Token Sale",
@@ -125,29 +138,72 @@ async function connectViaWalletConnect() {
       }
     });
   }
+  if (!wcModal) {
+    wcModal = new ModalLib({
+      projectId: "69e2560c7b637bd282fec177545d8036",
+      themeMode: "light",
+      // optional: stack above your popup
+      themeVariables: { "--wcm-z-index": "3000" }
+    });
+  }
+}
 
-  await wcProvider.enable();
-  const ethersProvider = new ethers.BrowserProvider(wcProvider);
-  const signer = await ethersProvider.getSigner();
-  return await signer.getAddress();
+async function connectViaWalletConnect() {
+  await ensureWalletConnectReady();
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Show QR when URI is ready
+      wcUniversalProvider.once("display_uri", (uri) => {
+        wcModal.openModal({ uri });
+      });
+
+      const session = await wcUniversalProvider.connect({
+        namespaces: {
+          eip155: {
+            methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData"],
+            chains: ["eip155:1"], // Ethereum mainnet
+            events: ["chainChanged", "accountsChanged"]
+          }
+        }
+      });
+
+      // Close QR modal once connected
+      wcModal.closeModal();
+
+      // Extract first account address from CAIP-10 string "eip155:1:0xabc..."
+      const caip = session?.namespaces?.eip155?.accounts?.[0];
+      const address = caip ? caip.split(":")[2] : null;
+      if (!address) throw new Error("No account returned from WalletConnect.");
+      resolve(address);
+    } catch (e) {
+      try { wcModal.closeModal(); } catch (_) {}
+      reject(e);
+    }
+  });
 }
 
 /* ---------------------------
-   Dispatcher
+   Main connect dispatcher
 --------------------------- */
 async function connectWallet(type, discoveredProviders) {
+  // WalletConnect button is always QR
   if (type === "walletconnect") {
     return await connectViaWalletConnect();
   }
+
+  // For specific wallets: try that wallet’s own injected provider first
   const injected = findInjectedFor(type, discoveredProviders);
   if (injected) {
     try {
       return await connectViaInjected(injected);
     } catch (err) {
-      console.warn(`${type} injected failed, fallback to WalletConnect…`, err);
+      console.warn(`${type} injected connect failed, falling back to QR…`, err);
       return await connectViaWalletConnect();
     }
   }
+
+  // No matching extension → QR fallback
   return await connectViaWalletConnect();
 }
 
@@ -156,7 +212,7 @@ async function connectWallet(type, discoveredProviders) {
 --------------------------- */
 function launchTransak() {
   const transak = new TransakSDK.default({
-    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676",
+    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", // test key
     environment: "STAGING",
     defaultCryptoCurrency: "AUTODY",
     fiatCurrency: "USD",
@@ -169,7 +225,7 @@ function launchTransak() {
 }
 
 /* ---------------------------
-   USD → AUTODY converter
+   Live USD → AUTODY converter
 --------------------------- */
 const usdInput   = document.getElementById("usdAmount");
 const tokenInput = document.getElementById("tokenAmount");

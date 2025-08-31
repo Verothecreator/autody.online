@@ -144,7 +144,7 @@ async function connectViaWalletConnect() {
   return new Promise(async (resolve, reject) => {
     try {
       wcUniversalProvider.once("display_uri", (uri) => {
-        wcModal.openModal({ uri });
+        setTimeout(() => wcModal.openModal({ uri }), 100);
       });
 
       const session = await wcUniversalProvider.connect({

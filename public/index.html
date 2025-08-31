@@ -95,34 +95,52 @@
       <p>&copy; 2025 Autody. All rights reserved.</p>
     </div>
   </footer>
-  <!-- Buy Card Popup (hidden by default) -->
+  
   <div id="buy-card-popup" class="popup-overlay">
     <div class="popup-content">
       <span id="close-popup" class="close-btn">&times;</span>
   
-      <div class="buy-card">
-        <h2>Buy Autody with USD</h2>
-        <p>Use your debit card, credit card, or bank transfer to get AUTODY.</p>
+      <!-- Step 1: Buy Form -->
+      <div id="buy-step">
+        <div class="buy-card">
+          <h2>Buy Autody with USD</h2>
+          <p>Use your debit card, credit card, or bank transfer to get AUTODY.</p>
   
-        <div class="form-group">
-          <label for="usdAmount">USD</label>
-          <input type="number" id="usdAmount" placeholder="Enter USD">
-        </div>
-        
-        <div class="form-group">
-          <label for="tokenAmount">AUTODY</label>
-          <input type="text" id="tokenAmount" readonly>
-        </div>
+          <div class="form-group">
+            <label for="usdAmount">USD</label>
+            <input type="number" id="usdAmount" placeholder="Enter USD">
+          </div>
+          
+          <div class="form-group">
+            <label for="tokenAmount">AUTODY</label>
+            <input type="text" id="tokenAmount" readonly>
+          </div>
   
-        <button class="wallet-btn">Connect Wallet</button>
-        <button class="buy-btn" id="buy-autody-btn">Buy Now</button>
-        <p class="secure">
-          🔒 Secure payment powered by Transak.<br>
-          We do not store your card or wallet details.
-        </p>
+          <button id="open-wallets" class="wallet-btn">Connect Wallet</button>
+          <button class="buy-btn" id="buy-autody-btn">Buy Now</button>
+  
+          <p class="secure">
+            🔒 Secure payment powered by Transak.<br>
+            We do not store your card or wallet details.
+          </p>
+          <p id="walletAddressDisplay"></p>
+        </div>
+      </div>
+  
+      <!-- Step 2: Wallet Options -->
+      <div id="wallet-step" style="display:none;">
+        <h2>Connect your wallet</h2>
+        <p>To continue, connect with one of our available wallet providers.</p>
+        <button class="wallet-option" data-wallet="metamask">🦊 MetaMask</button>
+        <button class="wallet-option" data-wallet="walletconnect">🌐 WalletConnect</button>
+        <button class="wallet-option" data-wallet="coinbase">🟦 Coinbase Wallet</button>
+        <button class="wallet-option" data-wallet="trust">🛡 Trust Wallet</button>
+        <button class="wallet-option" data-wallet="ledger">📟 Ledger</button>
+        <button id="back-to-buy" class="wallet-btn">⬅ Back</button>
       </div>
     </div>
   </div>
+
   
   <!-- Experimental Uniswap v4 SDK -->
   <script src="https://unpkg.com/@uniswap/v4-sdk@latest/dist/uniswap-v4-sdk.umd.js"></script>

@@ -114,7 +114,25 @@
           <input type="text" id="tokenAmount" readonly>
         </div>
   
-        <button id="connectWalletBtn" class="wallet-btn">Connect Wallet</button>
+        <div id="wallet-options" class="wallet-options">
+          <h3>Select a Wallet</h3>
+          <button class="wallet-option" data-wallet="metamask">
+            🦊 MetaMask
+          </button>
+          <button class="wallet-option" data-wallet="walletconnect">
+            🌐 WalletConnect
+          </button>
+          <button class="wallet-option" data-wallet="coinbase">
+            🟦 Coinbase Wallet
+          </button>
+          <button class="wallet-option" data-wallet="trust">
+            🛡 Trust Wallet
+          </button>
+          <button class="wallet-option" data-wallet="ledger">
+            📟 Ledger
+          </button>
+        </div>
+        
         <p id="walletAddressDisplay"></p>
         <button class="buy-btn" id="buy-autody-btn">Buy Now</button>
         <p class="secure">

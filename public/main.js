@@ -8,7 +8,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const buyStep = document.getElementById("buy-step");
   const walletStep = document.getElementById("wallet-step");
   const openWallets = document.getElementById("open-wallets");
-  const backToBuy = document.getElementById("back-to-buy");
   const walletDisplay = document.getElementById("walletAddressDisplay");
 
   // Open popup
@@ -31,71 +30,99 @@ document.addEventListener("DOMContentLoaded", () => {
     walletStep.style.display = "block";
   });
 
-  // Back to buy step
-  backToBuy.addEventListener("click", () => {
-    walletStep.style.display = "none";
-    buyStep.style.display = "block";
-  });
-
   // Buy button launches Transak
   buyBtn.addEventListener("click", (e) => {
     e.preventDefault();
     launchTransak();
   });
 
+  // ---------------------------
   // Wallet connect logic
+  // ---------------------------
   document.querySelectorAll(".wallet-option").forEach(btn => {
     btn.addEventListener("click", async () => {
       const type = btn.dataset.wallet;
-      const walletDisplay = document.getElementById("walletAddressDisplay");
-  
+
       try {
-        if (type === "metamask") {
-          if (!window.ethereum) {
-            alert("MetaMask not installed.");
-            return;
-          }
-          const provider = new ethers.BrowserProvider(window.ethereum);
-          await window.ethereum.request({ method: "eth_requestAccounts" });
-          const signer = await provider.getSigner();
-          const address = await signer.getAddress();
-  
-          walletDisplay.innerText = `Connected: ${address}`;
-          window.localStorage.setItem("autodyWallet", address);
+        const connected = await connectWallet(type);
+        if (connected) {
+          walletDisplay.innerText = `Connected: ${connected}`;
+          window.localStorage.setItem("autodyWallet", connected);
+
+          // ✅ Auto-return to buy step
+          walletStep.style.display = "none";
+          buyStep.style.display = "block";
         }
-  
-        else if (type === "walletconnect") {
-          // WalletConnect setup will be added (see below 👇)
-          alert("WalletConnect QR code flow coming next");
-          return;
-        }
-  
-        else if (type === "coinbase") {
-          alert("Coinbase Wallet SDK setup coming next");
-          return;
-        }
-  
-        else if (type === "trust") {
-          alert("Trust Wallet connection uses WalletConnect under the hood.");
-          return;
-        }
-  
-        else if (type === "ledger") {
-          alert("Ledger support requires USB / Bluetooth bridge (advanced setup).");
-          return;
-        }
-  
-        // ✅ If connection worked, return to buy step
-        document.getElementById("wallet-step").style.display = "none";
-        document.getElementById("buy-step").style.display = "block";
-  
       } catch (err) {
         console.error("Wallet connection failed:", err);
+        alert("Connection failed: " + err.message);
       }
     });
   });
-
 });
+
+// ---------------------------
+// WalletConnect Setup
+// ---------------------------
+let wcClient = null;
+
+async function initWalletConnect() {
+  if (!wcClient) {
+    wcClient = await window.WalletConnectClient.init({
+      projectId: "YOUR_PROJECT_ID", // get from https://cloud.walletconnect.com
+      relayUrl: "wss://relay.walletconnect.com",
+      metadata: {
+        name: "Autody",
+        description: "Autody Token Sale",
+        url: window.location.origin,
+        icons: ["https://yourdomain.com/logo.png"],
+      },
+    });
+  }
+  return wcClient;
+}
+
+async function connectViaWalletConnect() {
+  const client = await initWalletConnect();
+  const session = await client.connect({
+    requiredNamespaces: {
+      eip155: {
+        methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData"],
+        chains: ["eip155:1"], // Ethereum mainnet
+        events: ["chainChanged", "accountsChanged"],
+      },
+    },
+  });
+
+  const [account] = session.namespaces.eip155.accounts;
+  return account.split(":")[2]; // Extract ETH address
+}
+
+// ---------------------------
+// Connect Logic
+// ---------------------------
+async function connectWallet(type) {
+  const extAvailable = typeof window.ethereum !== "undefined";
+
+  // If extension wallet is available
+  if (extAvailable && (
+    type === "metamask" || type === "coinbase" || 
+    type === "blockchain" || type === "trust" || type === "ledger"
+  )) {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const signer = await provider.getSigner();
+      return await signer.getAddress();
+    } catch (err) {
+      console.warn(`${type} extension failed, falling back to QR…`);
+      return await connectViaWalletConnect();
+    }
+  }
+
+  // WalletConnect button or fallback
+  return await connectViaWalletConnect();
+}
 
 // ---------------------------
 // Transak

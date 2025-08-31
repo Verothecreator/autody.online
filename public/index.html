@@ -10,18 +10,6 @@
   <header class="header">
     <div class="container header-flex">
       <div class="logo-heading">
-        <<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Autody Token Sale</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <header class="header">
-    <div class="container header-flex">
-      <div class="logo-heading">
         <div class="heading-text">
           <h1>Autody Token Sale</h1>
           <p>Powering the New Autonomous Economy</p>
@@ -105,30 +93,30 @@
       <p>&copy; 2025 Autody. All rights reserved.</p>
     </div>
   </footer>
-  
+
   <div id="buy-card-popup" class="popup-overlay">
     <div class="popup-content">
       <span id="close-popup" class="close-btn">&times;</span>
-  
+
       <!-- Step 1: Buy Form -->
       <div id="buy-step">
         <div class="buy-card">
           <h2>Buy Autody with USD</h2>
           <p>Use your debit card, credit card, or bank transfer to get AUTODY.</p>
-  
+
           <div class="form-group">
             <label for="usdAmount">USD</label>
             <input type="number" id="usdAmount" placeholder="Enter USD">
           </div>
-          
+
           <div class="form-group">
             <label for="tokenAmount">AUTODY</label>
             <input type="text" id="tokenAmount" readonly>
           </div>
-  
+
           <button id="open-wallets" class="wallet-btn">Connect Wallet</button>
           <button class="buy-btn" id="buy-autody-btn">Buy Now</button>
-  
+
           <p class="secure">
             🔒 Secure payment powered by Transak.<br>
             We do not store your card or wallet details.
@@ -136,12 +124,12 @@
           <p id="walletAddressDisplay"></p>
         </div>
       </div>
-  
+
       <!-- Step 2: Wallet Options -->
       <div id="wallet-step" style="display:none;">
         <h2 class="wallet-title">Connect your wallet</h2>
         <p class="wallet-sub">To continue, connect with one of our available wallet providers.</p>
-        
+
         <div class="wallet-list">
           <button class="wallet-option" data-wallet="metamask">
             <img src="assets/icons/metamask.svg" alt="MetaMask" />
@@ -173,12 +161,15 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.4/dist/ethers.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/universal-provider@2.11.1/dist/index.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/dist/index.umd.min.js"></script>
+  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.1/dist/index.umd.min.js"></script>
+  
+
+
 
   <!-- Experimental Uniswap v4 SDK -->
   <script src="https://unpkg.com/@uniswap/v4-sdk@latest/dist/uniswap-v4-sdk.umd.js"></script>
   <script src="https://global.transak.com/sdk/v1.1/widget.js"></script>
   <script src="main.js"></script>
+
 </body>
 </html>

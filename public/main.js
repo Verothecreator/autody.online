@@ -1,6 +1,3 @@
-// ---------------------------
-// Popup + Steps
-// ---------------------------
 document.addEventListener("DOMContentLoaded", () => {
   const openBtn = document.getElementById("open-buy-card-btn");
   const popup = document.getElementById("buy-card-popup");
@@ -46,10 +43,12 @@ document.addEventListener("DOMContentLoaded", () => {
     launchTransak();
   });
 
-  // Wallet options click
+  // Wallet connect logic
   document.querySelectorAll(".wallet-option").forEach(btn => {
     btn.addEventListener("click", async () => {
       const type = btn.dataset.wallet;
+      const walletDisplay = document.getElementById("walletAddressDisplay");
+  
       try {
         if (type === "metamask") {
           if (!window.ethereum) {
@@ -60,30 +59,42 @@ document.addEventListener("DOMContentLoaded", () => {
           await window.ethereum.request({ method: "eth_requestAccounts" });
           const signer = await provider.getSigner();
           const address = await signer.getAddress();
+  
           walletDisplay.innerText = `Connected: ${address}`;
           window.localStorage.setItem("autodyWallet", address);
         }
+  
         else if (type === "walletconnect") {
-          alert("WalletConnect integration coming soon.");
+          // WalletConnect setup will be added (see below 👇)
+          alert("WalletConnect QR code flow coming next");
+          return;
         }
+  
         else if (type === "coinbase") {
-          alert("Coinbase Wallet integration coming soon.");
+          alert("Coinbase Wallet SDK setup coming next");
+          return;
         }
+  
         else if (type === "trust") {
-          alert("Trust Wallet integration coming soon.");
+          alert("Trust Wallet connection uses WalletConnect under the hood.");
+          return;
         }
+  
         else if (type === "ledger") {
-          alert("Ledger support requires bridge (coming soon).");
+          alert("Ledger support requires USB / Bluetooth bridge (advanced setup).");
+          return;
         }
-
-        // Return to Buy step
-        walletStep.style.display = "none";
-        buyStep.style.display = "block";
+  
+        // ✅ If connection worked, return to buy step
+        document.getElementById("wallet-step").style.display = "none";
+        document.getElementById("buy-step").style.display = "block";
+  
       } catch (err) {
-        console.error("Wallet connect failed:", err);
+        console.error("Wallet connection failed:", err);
       }
     });
   });
+
 });
 
 // ---------------------------

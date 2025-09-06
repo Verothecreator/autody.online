@@ -127,8 +127,6 @@ async function ensureWalletConnectReady() {
         icons: ["https://autody-online.onrender.com/favicon.ico"]
       }
     });
-    console.log("Universal:", window.WalletConnectUniversalProvider);
-    console.log("Modal:", window.WalletConnectModal);
   }
 
   if (!wcModal) {

@@ -18,12 +18,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   window.dispatchEvent(new Event("eip6963:requestProvider"));
 
-  // Auto-reconnect if saved wallet exists
-  const savedWallet = window.localStorage.getItem("autodyWallet");
-  if (savedWallet) {
-    walletDisplay.innerText = `Reconnected: ${savedWallet}`;
-  }
-
   // Open popup
   openBtn.addEventListener("click", (e) => {
     e.preventDefault();
@@ -53,7 +47,6 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", async () => {
       const type = btn.dataset.wallet; 
       try {
-        walletDisplay.innerText = `Connecting to ${type}...`;
         const address = await connectWallet(type, discoveredProviders);
         if (address) {
           walletDisplay.innerText = `Connected: ${address}`;
@@ -63,7 +56,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         console.error(`${type} connection failed:`, err);
-        walletDisplay.innerText = `❌ Connection failed`;
         alert("Connection failed: " + (err?.message || err));
       }
     });
@@ -109,13 +101,6 @@ async function connectViaInjected(injectedProvider) {
   await injectedProvider.request({ method: "eth_requestAccounts" });
   const provider = new ethers.BrowserProvider(injectedProvider);
   const signer = await provider.getSigner();
-
-  // Chain check
-  const network = await provider.getNetwork();
-  if (network.chainId !== 1) {
-    alert("Please switch your wallet to Ethereum Mainnet.");
-  }
-
   return await signer.getAddress();
 }
 
@@ -159,7 +144,7 @@ async function connectViaWalletConnect() {
   return new Promise(async (resolve, reject) => {
     try {
       wcUniversalProvider.once("display_uri", (uri) => {
-        wcModal.openModal({ uri });
+        setTimeout(() => wcModal.openModal({ uri }), 100);
       });
 
       const session = await wcUniversalProvider.connect({
@@ -198,7 +183,7 @@ async function connectWallet(type, discoveredProviders) {
     try {
       return await connectViaInjected(injected);
     } catch (err) {
-      console.warn(`${type} extension failed, falling back to WalletConnect…`, err);
+      console.warn(`${type} extension failed, falling back to QR…`, err);
       return await connectViaWalletConnect();
     }
   }

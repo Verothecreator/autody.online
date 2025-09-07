@@ -105,107 +105,32 @@ async function connectViaInjected(injectedProvider) {
 }
 
 /* ---------------------------
-   WalletConnect (QR) setup
---------------------------- */
-let wcUniversalProvider = null;
-let wcModal = null;
-
-async function ensureWalletConnectReady() {
-  const Universal = window.WalletConnectUniversalProvider;
-  const ModalLib  = window.WalletConnectModal?.default || window.WalletConnectModal;
-  if (!Universal || !ModalLib) {
-    throw new Error("WalletConnect scripts not loaded. Make sure universal-provider and modal are included.");
-  }
-
-  if (!wcUniversalProvider) {
-    wcUniversalProvider = await Universal.init({
-      projectId: "69e2560c7b637bd282fec177545d8036", // ✅ your real projectId
-      metadata: {
-        name: "Autody",
-        description: "Autody Token Sale",
-        url: window.location.origin,
-        icons: ["https://autody-online.onrender.com/favicon.ico"]
-      }
-    });
-  }
-
-  if (!wcModal) {
-    wcModal = new ModalLib({
-      projectId: "69e2560c7b637bd282fec177545d8036",
-      themeMode: "light",
-      themeVariables: { "--wcm-z-index": "3000" }
-    });
-  }
-}
-
-async function connectViaWalletConnectFor(type) {
-  await ensureWalletConnectReady();
-
-  // Map button type → WalletConnect "recommended" wallet ID
-  const WALLET_ID_MAP = {
-    metamask: "metaMask",
-    coinbase: "coinbaseWallet",
-    trust: "trustWallet",
-    blockchain: "blockchain",
-    ledger: "ledger"
-  };
-
-  return new Promise(async (resolve, reject) => {
-    try {
-      wcUniversalProvider.once("display_uri", (uri) => {
-        wcModal.openModal({
-          uri,
-          // This is the magic part: focus WC modal on clicked wallet if possible
-          standaloneChains: ["eip155:1"],
-          explorerRecommendedWalletIds: WALLET_ID_MAP[type] ? [WALLET_ID_MAP[type]] : []
-        });
-      });
-
-      const session = await wcUniversalProvider.connect({
-        namespaces: {
-          eip155: {
-            methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData"],
-            chains: ["eip155:1"],
-            events: ["chainChanged", "accountsChanged"]
-          }
-        }
-      });
-
-      wcModal.closeModal();
-
-      const caip = session?.namespaces?.eip155?.accounts?.[0];
-      const address = caip ? caip.split(":")[2] : null;
-      if (!address) throw new Error("No account returned from WalletConnect.");
-      resolve(address);
-    } catch (e) {
-      try { wcModal.closeModal(); } catch (_) {}
-      reject(e);
-    }
-  });
-}
-
-/* ---------------------------
    Main connect dispatcher
 --------------------------- */
 async function connectWallet(type, discoveredProviders) {
-  // Generic WalletConnect button → always open WC modal
-  if (type === "walletconnect") {
-    return await connectViaWalletConnectFor(type);
-  }
-
-  // Try injected provider first (MetaMask, Coinbase, Trust, etc.)
   const injected = findInjectedFor(type, discoveredProviders);
+
   if (injected) {
-    try {
-      return await connectViaInjected(injected);
-    } catch (err) {
-      console.warn(`${type} extension failed, falling back to QR…`, err);
-      return await connectViaWalletConnectFor(type);
-    }
+    // Extension installed → open extension popup
+    return await connectViaInjected(injected);
   }
 
-  // If no injected provider found → fallback to WalletConnect for this wallet
-  return await connectViaWalletConnectFor(type);
+  // If extension not installed → redirect to wallet’s official connect page
+  const WALLET_URLS = {
+    metamask:   "https://metamask.io/download/",
+    coinbase:   "https://www.coinbase.com/wallet",
+    blockchain: "https://www.blockchain.com/wallet",
+    trust:      "https://trustwallet.com/",
+    ledger:     "https://www.ledger.com/start"
+  };
+
+  const url = WALLET_URLS[type];
+  if (url) {
+    window.open(url, "_blank"); // open wallet’s official QR/connect page
+    throw new Error(`${type} extension not found, redirected to ${url}`);
+  }
+
+  throw new Error(`No provider available for ${type}`);
 }
 
 /* ---------------------------

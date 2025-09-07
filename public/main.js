@@ -105,33 +105,90 @@ async function connectViaInjected(injectedProvider) {
 }
 
 /* ---------------------------
+   WalletConnect (QR) setup
+--------------------------- */
+let wcUniversalProvider = null;
+let wcModal = null;
+
+async function ensureWalletConnectReady() {
+  const Universal = window.WalletConnectUniversalProvider;
+  const ModalLib  = window.WalletConnectModal?.default || window.WalletConnectModal;
+  if (!Universal || !ModalLib) {
+    throw new Error("WalletConnect scripts not loaded. Make sure universal-provider and modal are included.");
+  }
+
+  if (!wcUniversalProvider) {
+    wcUniversalProvider = await Universal.init({
+      projectId: "69e2560c7b637bd282fec177545d8036", // ✅ your real projectId
+      metadata: {
+        name: "Autody",
+        description: "Autody Token Sale",
+        url: window.location.origin,
+        icons: ["https://autody-online.onrender.com/favicon.ico"]
+      }
+    });
+  }
+
+  if (!wcModal) {
+    wcModal = new ModalLib({
+      projectId: "69e2560c7b637bd282fec177545d8036",
+      themeMode: "light",
+      themeVariables: { "--wcm-z-index": "3000" }
+    });
+  }
+}
+
+async function connectViaWalletConnect() {
+  await ensureWalletConnectReady();
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      wcUniversalProvider.once("display_uri", (uri) => {
+        setTimeout(() => wcModal.openModal({ uri }), 100);
+      });
+
+      const session = await wcUniversalProvider.connect({
+        namespaces: {
+          eip155: {
+            methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData"],
+            chains: ["eip155:1"],
+            events: ["chainChanged", "accountsChanged"]
+          }
+        }
+      });
+
+      wcModal.closeModal();
+
+      const caip = session?.namespaces?.eip155?.accounts?.[0];
+      const address = caip ? caip.split(":")[2] : null;
+      if (!address) throw new Error("No account returned from WalletConnect.");
+      resolve(address);
+    } catch (e) {
+      try { wcModal.closeModal(); } catch (_) {}
+      reject(e);
+    }
+  });
+}
+
+/* ---------------------------
    Main connect dispatcher
 --------------------------- */
 async function connectWallet(type, discoveredProviders) {
+  if (type === "walletconnect") {
+    return await connectViaWalletConnect();
+  }
+
   const injected = findInjectedFor(type, discoveredProviders);
-
   if (injected) {
-    // Extension installed → open extension popup
-    return await connectViaInjected(injected);
+    try {
+      return await connectViaInjected(injected);
+    } catch (err) {
+      console.warn(`${type} extension failed, falling back to QR…`, err);
+      return await connectViaWalletConnect();
+    }
   }
 
-  // If extension not installed → deep-link to wallet’s official connect page
-  const siteURL = window.location.origin; // your Autody site URL
-  const WALLET_URLS = {
-    metamask:   `https://metamask.app.link/dapp/${siteURL}`,
-    coinbase:   `https://go.cb-w.com/dapp?cb_url=${siteURL}`,
-    trust:      `https://link.trustwallet.com/open_url?url=${siteURL}`,
-    blockchain: "https://login.blockchain.com/#/login",
-    ledger:     `ledgerlive://discover/dapp?url=${siteURL}`
-  };
-
-  const url = WALLET_URLS[type];
-  if (url) {
-    window.open(url, "_blank"); // open wallet’s own connect page
-    throw new Error(`${type} extension not found, redirected to ${url}`);
-  }
-
-  throw new Error(`No provider available for ${type}`);
+  return await connectViaWalletConnect();
 }
 
 /* ---------------------------

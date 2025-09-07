@@ -111,10 +111,12 @@ let wcUniversalProvider = null;
 let wcModal = null;
 
 async function ensureWalletConnectReady() {
-  const Universal = window.WalletConnectUniversalProvider; // from UMD
-  const ModalLib  = window.WalletConnectModal;             // from UMD
+  // Correct globals from UMD bundles
+  const Universal = window.WalletConnectEthereumProvider;
+  const ModalLib  = window.WalletConnectModal;
 
   if (!Universal || !ModalLib) {
+    console.error("Available globals:", Object.keys(window));
     throw new Error("WalletConnect scripts not loaded. Make sure universal-provider and modal are included.");
   }
 

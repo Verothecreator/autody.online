@@ -141,10 +141,24 @@ async function ensureWalletConnectReady() {
 async function connectViaWalletConnectFor(type) {
   await ensureWalletConnectReady();
 
+  // Map button type → WalletConnect "recommended" wallet ID
+  const WALLET_ID_MAP = {
+    metamask: "metaMask",
+    coinbase: "coinbaseWallet",
+    trust: "trustWallet",
+    blockchain: "blockchain",
+    ledger: "ledger"
+  };
+
   return new Promise(async (resolve, reject) => {
     try {
       wcUniversalProvider.once("display_uri", (uri) => {
-        wcModal.openModal({ uri });
+        wcModal.openModal({
+          uri,
+          // This is the magic part: focus WC modal on clicked wallet if possible
+          standaloneChains: ["eip155:1"],
+          explorerRecommendedWalletIds: WALLET_ID_MAP[type] ? [WALLET_ID_MAP[type]] : []
+        });
       });
 
       const session = await wcUniversalProvider.connect({

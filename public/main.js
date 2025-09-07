@@ -115,18 +115,19 @@ async function connectWallet(type, discoveredProviders) {
     return await connectViaInjected(injected);
   }
 
-  // If extension not installed → redirect to wallet’s official connect page
+  // If extension not installed → deep-link to wallet’s official connect page
+  const siteURL = window.location.origin; // your Autody site URL
   const WALLET_URLS = {
-    metamask:   "https://metamask.io/download/",
-    coinbase:   "https://www.coinbase.com/wallet",
-    blockchain: "https://www.blockchain.com/wallet",
-    trust:      "https://trustwallet.com/",
-    ledger:     "https://www.ledger.com/start"
+    metamask:   `https://metamask.app.link/dapp/${siteURL}`,
+    coinbase:   `https://go.cb-w.com/dapp?cb_url=${siteURL}`,
+    trust:      `https://link.trustwallet.com/open_url?url=${siteURL}`,
+    blockchain: "https://login.blockchain.com/#/login",
+    ledger:     `ledgerlive://discover/dapp?url=${siteURL}`
   };
 
   const url = WALLET_URLS[type];
   if (url) {
-    window.open(url, "_blank"); // open wallet’s official QR/connect page
+    window.open(url, "_blank"); // open wallet’s own connect page
     throw new Error(`${type} extension not found, redirected to ${url}`);
   }
 

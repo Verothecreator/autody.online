@@ -111,9 +111,8 @@ let wcUniversalProvider = null;
 let wcModal = null;
 
 async function ensureWalletConnectReady() {
-  // Fix global names for UMD bundles
-  const Universal = window.WalletConnectUniversalProvider?.EthereumProvider;
-  const ModalLib  = window.WalletConnectModal;
+  const Universal = window.WalletConnectUniversalProvider; // from UMD
+  const ModalLib  = window.WalletConnectModal;             // from UMD
 
   if (!Universal || !ModalLib) {
     throw new Error("WalletConnect scripts not loaded. Make sure universal-provider and modal are included.");
@@ -121,7 +120,7 @@ async function ensureWalletConnectReady() {
 
   if (!wcUniversalProvider) {
     wcUniversalProvider = await Universal.init({
-      projectId: "69e2560c7b637bd282fec177545d8036", // ✅ your real projectId
+      projectId: "69e2560c7b637bd282fec177545d8036",
       metadata: {
         name: "Autody",
         description: "Autody Token Sale",

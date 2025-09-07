@@ -138,13 +138,13 @@ async function ensureWalletConnectReady() {
   }
 }
 
-async function connectViaWalletConnect() {
+async function connectViaWalletConnectFor(type) {
   await ensureWalletConnectReady();
 
   return new Promise(async (resolve, reject) => {
     try {
       wcUniversalProvider.once("display_uri", (uri) => {
-        setTimeout(() => wcModal.openModal({ uri }), 100);
+        wcModal.openModal({ uri });
       });
 
       const session = await wcUniversalProvider.connect({
@@ -174,21 +174,24 @@ async function connectViaWalletConnect() {
    Main connect dispatcher
 --------------------------- */
 async function connectWallet(type, discoveredProviders) {
+  // Generic WalletConnect button → always open WC modal
   if (type === "walletconnect") {
-    return await connectViaWalletConnect();
+    return await connectViaWalletConnectFor(type);
   }
 
+  // Try injected provider first (MetaMask, Coinbase, Trust, etc.)
   const injected = findInjectedFor(type, discoveredProviders);
   if (injected) {
     try {
       return await connectViaInjected(injected);
     } catch (err) {
       console.warn(`${type} extension failed, falling back to QR…`, err);
-      return await connectViaWalletConnect();
+      return await connectViaWalletConnectFor(type);
     }
   }
 
-  return await connectViaWalletConnect();
+  // If no injected provider found → fallback to WalletConnect for this wallet
+  return await connectViaWalletConnectFor(type);
 }
 
 /* ---------------------------

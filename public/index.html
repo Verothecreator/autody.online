@@ -161,19 +161,16 @@
   </div>
   
   <script type="module">
-    import UniversalProvider from "https://cdn.jsdelivr.net/npm/@walletconnect/universal-provider@2.21.8/+esm";
-    import * as ModalModule from "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.7.0/+esm";
+    import UniversalProvider from "https://esm.sh/@walletconnect/universal-provider@2.21.8";
+    import { WalletConnectModal } from "https://esm.sh/@walletconnect/modal@2.7.0";
   
-    // Assign both ways so main.js can't miss it
     window.WalletConnectUniversalProvider = UniversalProvider;
-    window.WalletConnectModal = ModalModule;
-    window.WalletConnectModalConstructor = ModalModule.WalletConnectModal;
+    window.WalletConnectModal = { default: WalletConnectModal };
   
     console.log("Shim loaded → UniversalProvider:", !!window.WalletConnectUniversalProvider);
-    console.log("Shim loaded → Modal:", !!window.WalletConnectModal);
-    console.log("Shim loaded → Modal.default:", !!window.WalletConnectModal?.default);
+    console.log("Shim loaded → WalletConnectModal:", !!window.WalletConnectModal);
+    console.log("Shim loaded → WalletConnectModal.default:", !!window.WalletConnectModal?.default);
   </script>
-
 
   <script>
     console.log("CHECK → UniversalProvider:", window.WalletConnectUniversalProvider);

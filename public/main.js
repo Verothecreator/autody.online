@@ -111,37 +111,25 @@ let wcUniversalProvider = null;
 let wcModal = null;
 
 async function ensureWalletConnectReady() {
-  const EthereumProvider = window.WalletConnectEthereumProvider;
-  const Web3Modal = window.Web3Modal;
-
-  console.log("EthereumProvider global:", EthereumProvider);
-  console.log("Web3Modal global:", Web3Modal);
-
-  if (!EthereumProvider || !Web3Modal) {
+  const Modal = window.WalletConnectModal;
+  if (!Modal) {
     console.error("Available globals:", Object.keys(window));
-    throw new Error("WalletConnect scripts not loaded. Make sure ethereum-provider and web3modal standalone are included.");
-  }
-
-  if (!wcUniversalProvider) {
-    wcUniversalProvider = await EthereumProvider.init({
-      projectId: "69e2560c7b637bd282fec177545d8036", // ✅ your WalletConnect Project ID
-      metadata: {
-        name: "Autody",
-        description: "Autody Token Sale",
-        url: window.location.origin,
-        icons: ["https://autody-online.onrender.com/favicon.ico"]
-      }
-    });
+    throw new Error("WalletConnect Modal not loaded.");
   }
 
   if (!wcModal) {
-    wcModal = new Web3Modal({
+    wcModal = new Modal({
       projectId: "69e2560c7b637bd282fec177545d8036",
       themeMode: "light",
       themeVariables: { "--wcm-z-index": "3000" }
     });
   }
+
+  if (!wcUniversalProvider) {
+    wcUniversalProvider = await wcModal.getEthereumProvider();
+  }
 }
+
 
 async function connectViaWalletConnect() {
   await ensureWalletConnectReady();

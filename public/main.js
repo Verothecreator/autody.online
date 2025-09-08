@@ -111,6 +111,9 @@ let wcUniversalProvider = null;
 let wcModal = null;
 
 async function ensureWalletConnectReady() {
+  console.log("EthereumProvider:", window.WalletConnectEthereumProvider);
+  console.log("Modal:", window.WalletConnectModal);
+  
   // Correct globals from UMD bundles
   const Universal = window.WalletConnectEthereumProvider;
   const ModalLib  = window.WalletConnectModal;

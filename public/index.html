@@ -160,28 +160,8 @@
     </div>
   </div>
   
-  <script type="module">
-    import UniversalProvider from "https://esm.sh/@walletconnect/universal-provider@2.21.8";
-    import { WalletConnectModal } from "https://esm.sh/@walletconnect/modal@2.7.0";
-  
-    window.WalletConnectUniversalProvider = UniversalProvider;
-    window.WalletConnectModal = { default: WalletConnectModal };
-  
-    console.log("Shim loaded → UniversalProvider:", !!window.WalletConnectUniversalProvider);
-    console.log("Shim loaded → WalletConnectModal:", !!window.WalletConnectModal);
-    console.log("Shim loaded → WalletConnectModal.default:", !!window.WalletConnectModal?.default);
-  </script>
-
-  <script>
-    console.log("CHECK → UniversalProvider:", window.WalletConnectUniversalProvider);
-    console.log("CHECK → Modal:", window.WalletConnectModal);
-    console.log("CHECK → Modal.default:", window.WalletConnectModal?.default);
-  </script>
-
-  
-  <!-- ethers (needed for connectViaInjected) -->
+  <script type="module" src="walletconnect-shim.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
-  
   <!-- Experimental Uniswap v4 SDK -->
   <script src="https://unpkg.com/@uniswap/v4-sdk@latest/dist/uniswap-v4-sdk.umd.js"></script>
   <script src="https://global.transak.com/sdk/v1.1/widget.js"></script>

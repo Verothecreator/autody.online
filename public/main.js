@@ -111,20 +111,19 @@ let wcUniversalProvider = null;
 let wcModal = null;
 
 async function ensureWalletConnectReady() {
-  console.log("EthereumProvider:", window.WalletConnectEthereumProvider);
-  console.log("Modal:", window.WalletConnectModal);
-  
-  // Correct globals from UMD bundles
-  const Universal = window.WalletConnectEthereumProvider;
-  const ModalLib  = window.WalletConnectModal;
+  const { EthereumProvider } = window.WalletConnectEthereumProvider || {};
+  const Web3Modal = window.Web3Modal;
 
-  if (!Universal || !ModalLib) {
+  console.log("EthereumProvider:", EthereumProvider);
+  console.log("Web3Modal:", Web3Modal);
+
+  if (!EthereumProvider || !Web3Modal) {
     console.error("Available globals:", Object.keys(window));
-    throw new Error("WalletConnect scripts not loaded. Make sure universal-provider and modal are included.");
+    throw new Error("WalletConnect scripts not loaded. Make sure Web3Modal standalone is included.");
   }
 
   if (!wcUniversalProvider) {
-    wcUniversalProvider = await Universal.init({
+    wcUniversalProvider = await EthereumProvider.init({
       projectId: "69e2560c7b637bd282fec177545d8036",
       metadata: {
         name: "Autody",
@@ -136,7 +135,7 @@ async function ensureWalletConnectReady() {
   }
 
   if (!wcModal) {
-    wcModal = new ModalLib({
+    wcModal = new Web3Modal({
       projectId: "69e2560c7b637bd282fec177545d8036",
       themeMode: "light",
       themeVariables: { "--wcm-z-index": "3000" }

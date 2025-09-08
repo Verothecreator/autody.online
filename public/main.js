@@ -127,6 +127,7 @@ async function ensureWalletConnectReady() {
         icons: ["https://autody-online.onrender.com/favicon.ico"]
       }
     });
+    console.log("WalletConnect UniversalProvider initialized");
   }
 
   if (!wcModal) {
@@ -135,6 +136,7 @@ async function ensureWalletConnectReady() {
       themeMode: "light",
       themeVariables: { "--wcm-z-index": "3000" }
     });
+    console.log("WalletConnect Modal initialized");
   }
 }
 
@@ -148,6 +150,9 @@ async function connectViaWalletConnect(preferred = "walletconnect") {
   return new Promise(async (resolve, reject) => {
     try {
       wcUniversalProvider.once("display_uri", (uri) => {
+        console.log(`Opening WalletConnect QR for wallet: ${preferred}`);
+        console.log("WC URI:", uri);
+
         setTimeout(() => {
           wcModal.openModal({
             uri,
@@ -172,9 +177,11 @@ async function connectViaWalletConnect(preferred = "walletconnect") {
       const caip = session?.namespaces?.eip155?.accounts?.[0];
       const address = caip ? caip.split(":")[2] : null;
       if (!address) throw new Error("No account returned from WalletConnect.");
+      console.log(`Connected via ${preferred} → ${address}`);
       resolve(address);
     } catch (e) {
       try { wcModal.closeModal(); } catch (_) {}
+      console.error(`WalletConnect QR (${preferred}) failed:`, e);
       reject(e);
     }
   });
@@ -188,13 +195,15 @@ async function connectWallet(type, discoveredProviders) {
 
   if (injected) {
     try {
+      console.log(`Trying injected provider for ${type}…`);
       return await connectViaInjected(injected);
     } catch (err) {
-      console.warn(`${type} extension failed, showing ${type} QR…`, err);
+      console.warn(`${type} extension failed, falling back to QR…`, err);
       return await connectViaWalletConnect(type); // pass wallet type
     }
   }
 
+  console.log(`${type} extension not found, falling back to QR`);
   return await connectViaWalletConnect(type); // fallback with brand
 }
 

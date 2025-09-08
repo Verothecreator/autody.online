@@ -160,21 +160,16 @@
     </div>
   </div>
 
-  <!-- Web3Modal Standalone (includes WalletConnect + QR modal in one) -->
-  <script src="https://unpkg.com/@web3modal/standalone@2.6.2/dist/index.umd.js"></script>
+  <!-- WalletConnect Ethereum Provider (v2, UMD build) -->
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.1/dist/index.umd.min.js"></script>
+  
+  <!-- Web3Modal Standalone (UMD build) -->
+  <script src="https://cdn.jsdelivr.net/npm/@web3modal/standalone@2.6.2/dist/index.umd.min.js"></script>
   
   <!-- Experimental Uniswap v4 SDK -->
   <script src="https://unpkg.com/@uniswap/v4-sdk@latest/dist/uniswap-v4-sdk.umd.js"></script>
   <script src="https://global.transak.com/sdk/v1.1/widget.js"></script>
   <script src="main.js"></script>
-
-
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.1/dist/index.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@web3modal/standalone@2.6.2/dist/index.umd.min.js"></script>
-  <script>
-    console.log("EthereumProvider global:", window.WalletConnectEthereumProvider);
-    console.log("Web3Modal global:", window.Web3Modal);
-  </script>
 
 </body>
 </html>

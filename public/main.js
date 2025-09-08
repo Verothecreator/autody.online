@@ -111,20 +111,20 @@ let wcUniversalProvider = null;
 let wcModal = null;
 
 async function ensureWalletConnectReady() {
-  const { EthereumProvider } = window.WalletConnectEthereumProvider || {};
+  const EthereumProvider = window.WalletConnectEthereumProvider;
   const Web3Modal = window.Web3Modal;
 
-  console.log("EthereumProvider:", EthereumProvider);
-  console.log("Web3Modal:", Web3Modal);
+  console.log("EthereumProvider global:", EthereumProvider);
+  console.log("Web3Modal global:", Web3Modal);
 
   if (!EthereumProvider || !Web3Modal) {
     console.error("Available globals:", Object.keys(window));
-    throw new Error("WalletConnect scripts not loaded. Make sure Web3Modal standalone is included.");
+    throw new Error("WalletConnect scripts not loaded. Make sure ethereum-provider and web3modal standalone are included.");
   }
 
   if (!wcUniversalProvider) {
     wcUniversalProvider = await EthereumProvider.init({
-      projectId: "69e2560c7b637bd282fec177545d8036",
+      projectId: "69e2560c7b637bd282fec177545d8036", // ✅ your WalletConnect Project ID
       metadata: {
         name: "Autody",
         description: "Autody Token Sale",
@@ -149,14 +149,15 @@ async function connectViaWalletConnect() {
   return new Promise(async (resolve, reject) => {
     try {
       wcUniversalProvider.once("display_uri", (uri) => {
-        setTimeout(() => wcModal.openModal({ uri }), 100);
+        // Show QR modal
+        wcModal.openModal({ uri });
       });
 
       const session = await wcUniversalProvider.connect({
         namespaces: {
           eip155: {
             methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData"],
-            chains: ["eip155:1"],
+            chains: ["eip155:1"], // Ethereum mainnet
             events: ["chainChanged", "accountsChanged"]
           }
         }

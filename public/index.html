@@ -160,16 +160,15 @@
     </div>
   </div>
   
-  <!-- WalletConnect ESM shim -->
   <script type="module">
     import UniversalProvider from "https://cdn.jsdelivr.net/npm/@walletconnect/universal-provider@2.21.8/+esm";
-    import { WalletConnectModal } from "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.7.0/+esm";
+    import * as ModalModule from "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.7.0/+esm";
   
     window.WalletConnectUniversalProvider = UniversalProvider;
-    window.WalletConnectModal = WalletConnectModal;
+    window.WalletConnectModal = ModalModule; // contains .default
   
-    console.log("UniversalProvider global:", !!window.WalletConnectUniversalProvider);
-    console.log("WalletConnectModal global:", !!window.WalletConnectModal);
+    console.log("Shim → UniversalProvider:", !!window.WalletConnectUniversalProvider);
+    console.log("Shim → WalletConnectModal:", !!window.WalletConnectModal);
   </script>
   
   <!-- ethers (needed for connectViaInjected) -->

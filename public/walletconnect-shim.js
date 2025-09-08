@@ -6,6 +6,4 @@ import { WalletConnectModal } from "https://esm.sh/@walletconnect/modal@2.7.0";
 window.WalletConnectUniversalProvider = UniversalProvider;
 window.WalletConnectModal = { default: WalletConnectModal };
 
-console.log("Shim loaded → UniversalProvider:", !!window.WalletConnectUniversalProvider);
-console.log("Shim loaded → WalletConnectModal:", !!window.WalletConnectModal);
-console.log("Shim loaded → WalletConnectModal.default:", !!window.WalletConnectModal?.default);
+console.log("Shim ready");

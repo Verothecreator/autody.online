@@ -164,12 +164,23 @@
     import UniversalProvider from "https://cdn.jsdelivr.net/npm/@walletconnect/universal-provider@2.21.8/+esm";
     import * as ModalModule from "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.7.0/+esm";
   
+    // Assign both ways so main.js can't miss it
     window.WalletConnectUniversalProvider = UniversalProvider;
-    window.WalletConnectModal = ModalModule; // contains .default
+    window.WalletConnectModal = ModalModule;
+    window.WalletConnectModalConstructor = ModalModule.WalletConnectModal;
   
-    console.log("Shim → UniversalProvider:", !!window.WalletConnectUniversalProvider);
-    console.log("Shim → WalletConnectModal:", !!window.WalletConnectModal);
+    console.log("Shim loaded → UniversalProvider:", !!window.WalletConnectUniversalProvider);
+    console.log("Shim loaded → Modal:", !!window.WalletConnectModal);
+    console.log("Shim loaded → Modal.default:", !!window.WalletConnectModal?.default);
   </script>
+
+
+  <script>
+    console.log("CHECK → UniversalProvider:", window.WalletConnectUniversalProvider);
+    console.log("CHECK → Modal:", window.WalletConnectModal);
+    console.log("CHECK → Modal.default:", window.WalletConnectModal?.default);
+  </script>
+
   
   <!-- ethers (needed for connectViaInjected) -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>

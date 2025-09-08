@@ -138,19 +138,29 @@ async function ensureWalletConnectReady() {
   }
 }
 
-async function connectViaWalletConnect() {
+/**
+ * Open WalletConnect QR with a preferred wallet highlighted
+ * @param {string} preferred - wallet id: "metamask" | "coinbase" | "trust" | "blockchain" | "ledger" | "walletconnect"
+ */
+async function connectViaWalletConnect(preferred = "walletconnect") {
   await ensureWalletConnectReady();
 
   return new Promise(async (resolve, reject) => {
     try {
       wcUniversalProvider.once("display_uri", (uri) => {
-        setTimeout(() => wcModal.openModal({ uri }), 100);
+        setTimeout(() => {
+          wcModal.openModal({
+            uri,
+            standaloneChains: ["eip155:1"],
+            standaloneWallets: [preferred] // highlight this wallet in QR modal
+          });
+        }, 100);
       });
 
       const session = await wcUniversalProvider.connect({
         namespaces: {
           eip155: {
-            methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData"],
+            methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData_v4"],
             chains: ["eip155:1"],
             events: ["chainChanged", "accountsChanged"]
           }
@@ -174,21 +184,18 @@ async function connectViaWalletConnect() {
    Main connect dispatcher
 --------------------------- */
 async function connectWallet(type, discoveredProviders) {
-  if (type === "walletconnect") {
-    return await connectViaWalletConnect();
-  }
-
   const injected = findInjectedFor(type, discoveredProviders);
+
   if (injected) {
     try {
       return await connectViaInjected(injected);
     } catch (err) {
-      console.warn(`${type} extension failed, falling back to QR…`, err);
-      return await connectViaWalletConnect();
+      console.warn(`${type} extension failed, showing ${type} QR…`, err);
+      return await connectViaWalletConnect(type); // pass wallet type
     }
   }
 
-  return await connectViaWalletConnect();
+  return await connectViaWalletConnect(type); // fallback with brand
 }
 
 /* ---------------------------

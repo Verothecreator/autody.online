@@ -160,37 +160,22 @@
     </div>
   </div>
   
-  <!-- WalletConnect Ethereum Provider (v2, UMD build) -->
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@latest/dist/index.umd.min.js"></script>
-
-  <!-- WalletConnect Universal Provider (UMD build) -->
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/universal-provider@2.11.0/dist/index.umd.min.js"></script>
-
-  <!-- WalletConnect Modal (UMD build) -->
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/dist/index.umd.min.js"></script>
-  
-  <!-- WalletConnect (Universal Provider + Modal) -->
+  <!-- WalletConnect (Universal Provider + Modal via ESM shim) -->
   <script type="module">
     import UniversalProvider from "https://cdn.jsdelivr.net/npm/@walletconnect/universal-provider@2.21.8/+esm";
     import { WalletConnectModal } from "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.7.0/+esm";
-  
-    // Attach to window so main.js can find them
+
+    // Expose to window for main.js to pick up
     window.WalletConnectUniversalProvider = UniversalProvider;
     window.WalletConnectModal = WalletConnectModal;
-  
-    // Console test
+
     console.log("UniversalProvider global:", !!window.WalletConnectUniversalProvider);
     console.log("WalletConnectModal global:", !!window.WalletConnectModal);
   </script>
-
-
   
   <!-- Experimental Uniswap v4 SDK -->
   <script src="https://unpkg.com/@uniswap/v4-sdk@latest/dist/uniswap-v4-sdk.umd.js"></script>
   <script src="https://global.transak.com/sdk/v1.1/widget.js"></script>
   <script src="main.js"></script>
-
 </body>
 </html>
-
-

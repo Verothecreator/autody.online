@@ -111,25 +111,32 @@ let wcUniversalProvider = null;
 let wcModal = null;
 
 async function ensureWalletConnectReady() {
-  const Modal = window.WalletConnectModal;
-  if (!Modal) {
-    console.error("Available globals:", Object.keys(window));
-    throw new Error("WalletConnect Modal not loaded.");
+  const Universal = window.WalletConnectUniversalProvider;
+  const ModalLib  = window.WalletConnectModal?.default || window.WalletConnectModal;
+  if (!Universal || !ModalLib) {
+    throw new Error("WalletConnect scripts not loaded. Make sure universal-provider and modal are included.");
+  }
+
+  if (!wcUniversalProvider) {
+    wcUniversalProvider = await Universal.init({
+      projectId: "69e2560c7b637bd282fec177545d8036", // ✅ your real projectId
+      metadata: {
+        name: "Autody",
+        description: "Autody Token Sale",
+        url: window.location.origin,
+        icons: ["https://autody-online.onrender.com/favicon.ico"]
+      }
+    });
   }
 
   if (!wcModal) {
-    wcModal = new Modal({
+    wcModal = new ModalLib({
       projectId: "69e2560c7b637bd282fec177545d8036",
       themeMode: "light",
       themeVariables: { "--wcm-z-index": "3000" }
     });
   }
-
-  if (!wcUniversalProvider) {
-    wcUniversalProvider = await wcModal.getEthereumProvider();
-  }
 }
-
 
 async function connectViaWalletConnect() {
   await ensureWalletConnectReady();
@@ -137,15 +144,14 @@ async function connectViaWalletConnect() {
   return new Promise(async (resolve, reject) => {
     try {
       wcUniversalProvider.once("display_uri", (uri) => {
-        // Show QR modal
-        wcModal.openModal({ uri });
+        setTimeout(() => wcModal.openModal({ uri }), 100);
       });
 
       const session = await wcUniversalProvider.connect({
         namespaces: {
           eip155: {
             methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData"],
-            chains: ["eip155:1"], // Ethereum mainnet
+            chains: ["eip155:1"],
             events: ["chainChanged", "accountsChanged"]
           }
         }

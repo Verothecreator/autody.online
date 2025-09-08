@@ -178,9 +178,37 @@
 
 </body>
 </html>
-<script>
-  console.log("UniversalProvider global:", window.WalletConnectUniversalProvider);
-  console.log("WalletConnectModal global:", window.WalletConnectModal);
+<!-- WalletConnect (Reown) Universal Provider + Modal via ESM -->
+<script type="module">
+  // Import ESM builds from jsDelivr
+  import UniversalProvider from 'https://cdn.jsdelivr.net/npm/@walletconnect/universal-provider@2.21.8/+esm';
+  import { WalletConnectModal } from 'https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.7.0/+esm';
+
+  // Expose to window so your existing console checks work
+  window.WalletConnectUniversalProvider = UniversalProvider;
+  window.WalletConnectModal = WalletConnectModal;
+
+  // Smoke test: should print "true"
+  console.log('UniversalProvider loaded:', !!window.WalletConnectUniversalProvider);
+  console.log('WalletConnectModal loaded:', !!window.WalletConnectModal);
+
+  // Optional: only initialize if you add a real Project ID
+  const PROJECT_ID = ''; // <-- put your Reown/WalletConnect Project ID here
+
+  if (!PROJECT_ID) {
+    console.warn('Add your WalletConnect/Reown projectId to initialize the provider & modal.');
+  } else {
+    // Minimal modal + provider init (no connect yet)
+    const modal = new WalletConnectModal({
+      projectId: PROJECT_ID,
+      chains: ['eip155:1'] // Ethereum mainnet; change as needed
+    });
+    console.log('Modal instance created:', !!modal);
+
+    const provider = await UniversalProvider.init({ projectId: PROJECT_ID });
+    console.log('UniversalProvider initialized:', !!provider);
+  }
 </script>
+
 
 

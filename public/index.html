@@ -160,18 +160,20 @@
     </div>
   </div>
   
-  <!-- WalletConnect (Universal Provider + Modal via ESM shim) -->
+  <!-- WalletConnect ESM shim -->
   <script type="module">
     import UniversalProvider from "https://cdn.jsdelivr.net/npm/@walletconnect/universal-provider@2.21.8/+esm";
     import { WalletConnectModal } from "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.7.0/+esm";
-
-    // Expose to window for main.js to pick up
+  
     window.WalletConnectUniversalProvider = UniversalProvider;
     window.WalletConnectModal = WalletConnectModal;
-
+  
     console.log("UniversalProvider global:", !!window.WalletConnectUniversalProvider);
     console.log("WalletConnectModal global:", !!window.WalletConnectModal);
   </script>
+  
+  <!-- ethers (needed for connectViaInjected) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
   
   <!-- Experimental Uniswap v4 SDK -->
   <script src="https://unpkg.com/@uniswap/v4-sdk@latest/dist/uniswap-v4-sdk.umd.js"></script>

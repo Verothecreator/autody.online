@@ -10,6 +10,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const openWallets  = document.getElementById("open-wallets");
   const walletDisplay= document.getElementById("walletAddressDisplay");
 
+  const usdInput   = document.getElementById("usdAmount");
+  const tokenInput = document.getElementById("tokenAmount");
+
   // --- EIP-6963 Provider Discovery ---
   const discoveredProviders = [];
   window.addEventListener("eip6963:announceProvider", (event) => {
@@ -17,6 +20,31 @@ document.addEventListener("DOMContentLoaded", () => {
     discoveredProviders.push({ info, provider });
   });
   window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+  // --- Helper: Enable/disable Buy button ---
+  function updateBuyButtonState() {
+    const usdRaw = (usdInput.value || "").toString().replace(/,/g, "");
+    const usdValue = parseFloat(usdRaw);
+    const wallet   = window.localStorage.getItem("autodyWallet");
+
+    const validUsd = isFinite(usdValue) && usdValue > 0;
+    const validWallet = wallet && wallet.length > 0;
+
+    if (validUsd && validWallet) {
+      buyBtn.disabled = false;
+    } else {
+      buyBtn.disabled = true;
+    }
+  }
+
+  // Initially disabled
+  buyBtn.disabled = true;
+
+  // Watch USD input
+  usdInput.addEventListener("input", updateBuyButtonState);
+
+  // Also re-check when wallet connects
+  document.addEventListener("walletConnected", updateBuyButtonState);
 
   // Open popup
   openBtn.addEventListener("click", (e) => {
@@ -51,6 +79,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (address) {
           walletDisplay.innerText = `Connected: ${address}`;
           window.localStorage.setItem("autodyWallet", address);
+
+          // ✅ trigger custom event for Buy button state
+          document.dispatchEvent(new Event("walletConnected"));
+
           walletStep.style.display = "none";
           buyStep.style.display = "block";
         }
@@ -195,16 +227,32 @@ async function connectWallet(type, discoveredProviders) {
    Transak
 --------------------------- */
 function launchTransak() {
+  const usdRaw = (document.getElementById("usdAmount").value || "").toString().replace(/,/g, "");
+  const usdValue = parseFloat(usdRaw);
+
+  if (!isFinite(usdValue) || usdValue <= 0) {
+    alert("Please enter a valid USD amount first.");
+    return;
+  }
+
+  const wallet = window.localStorage.getItem("autodyWallet") || "";
+  if (!wallet) {
+    alert("Please connect your wallet before buying.");
+    return;
+  }
+
   const transak = new TransakSDK.default({
-    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", 
-    environment: "STAGING",
+    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676",  // replace with your live key in production
+    environment: "STAGING", // change to "PRODUCTION" later
     defaultCryptoCurrency: "AUTODY",
     fiatCurrency: "USD",
-    walletAddress: window.localStorage.getItem("autodyWallet") || "",
+    fiatAmount: usdValue,   // ✅ pre-fill USD amount
+    walletAddress: wallet,  // ✅ auto-send to connected wallet
     themeColor: "007bff",
     hostURL: window.location.origin,
     redirectURL: window.location.href
   });
+
   transak.init();
 }
 

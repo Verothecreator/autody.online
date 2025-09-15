@@ -10,10 +10,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const openWallets  = document.getElementById("open-wallets");
   const walletDisplay= document.getElementById("walletAddressDisplay");
 
-  // Inputs
-  const usdInput   = document.getElementById("usdAmount");
-  const tokenInput = document.getElementById("tokenAmount");
-
   // --- EIP-6963 Provider Discovery ---
   const discoveredProviders = [];
   window.addEventListener("eip6963:announceProvider", (event) => {
@@ -55,10 +51,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (address) {
           walletDisplay.innerText = `Connected: ${address}`;
           window.localStorage.setItem("autodyWallet", address);
-
-          // ✅ trigger custom event so Buy button re-checks
-          document.dispatchEvent(new Event("walletConnected"));
-
           walletStep.style.display = "none";
           buyStep.style.display = "block";
         }
@@ -68,25 +60,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   });
-
-  // ---------------------------
-  // Buy button state management
-  // ---------------------------
-  function updateBuyButtonState() {
-    const usdRaw = (usdInput.value || "").toString().replace(/,/g, "");
-    const usdValue = parseFloat(usdRaw);
-    const wallet   = window.localStorage.getItem("autodyWallet");
-
-    const validUsd = isFinite(usdValue) && usdValue > 0;
-    const validWallet = wallet && wallet.length > 0;
-
-    buyBtn.disabled = !(validUsd && validWallet);
-  }
-
-  // Init state
-  buyBtn.disabled = true;
-  usdInput.addEventListener("input", updateBuyButtonState);
-  document.addEventListener("walletConnected", updateBuyButtonState);
 });
 
 /* ---------------------------
@@ -222,38 +195,25 @@ async function connectWallet(type, discoveredProviders) {
    Transak
 --------------------------- */
 function launchTransak() {
-  const usdRaw = (document.getElementById("usdAmount").value || "").toString().replace(/,/g, "");
-  const usdValue = parseFloat(usdRaw);
-
-  if (!isFinite(usdValue) || usdValue <= 0) {
-    alert("Please enter a valid USD amount first.");
-    return;
-  }
-
-  const wallet = window.localStorage.getItem("autodyWallet") || "";
-  if (!wallet) {
-    alert("Please connect your wallet before buying.");
-    return;
-  }
-
   const transak = new TransakSDK.default({
-    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676",  // replace with your live key
-    environment: "STAGING", // change to PRODUCTION later
+    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", 
+    environment: "STAGING",
     defaultCryptoCurrency: "AUTODY",
     fiatCurrency: "USD",
-    fiatAmount: usdValue,   // ✅ pre-fill USD amount
-    walletAddress: wallet,  // ✅ send to connected wallet
+    walletAddress: window.localStorage.getItem("autodyWallet") || "",
     themeColor: "007bff",
     hostURL: window.location.origin,
     redirectURL: window.location.href
   });
-
   transak.init();
 }
 
 /* ---------------------------
    Live USD → AUTODY converter
 --------------------------- */
+const usdInput   = document.getElementById("usdAmount");
+const tokenInput = document.getElementById("tokenAmount");
+
 const AUTODY_ADDRESS = "0xAB94A15E2d1a47069f4c6c33326A242Ba20AbD9B".toLowerCase();
 const NETWORK_SLUG   = "eth";
 const POOL_ADDRESS   = "0x50f7e4b8a5151996a32aa1f6da9856ffb2240dcd10b1afa72df3530b41f98cd3";

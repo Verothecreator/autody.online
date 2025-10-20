@@ -56,21 +56,37 @@
   
       <!-- Timeframe stats (like CG tabs) -->
       <div class="container" style="margin-top:1.25rem">
-          <div class="gt-tabs" id="gt-tabs">
-              <button data-win="5m"  class="gt-tab active">5M</button>
-              <button data-win="1h"  class="gt-tab">1H</button>
-              <button data-win="6h"  class="gt-tab">6H</button>
-              <button data-win="24h" class="gt-tab">24H</button>
+        <div class="gt-tabs" id="gt-tabs">
+          <button data-win="m5"  class="gt-tab"><span>5M</span><div class="gt-pct" id="pct-m5">0%</div></button>
+          <button data-win="h1"  class="gt-tab"><span>1H</span><div class="gt-pct" id="pct-h1">0%</div></button>
+          <button data-win="h6"  class="gt-tab"><span>6H</span><div class="gt-pct" id="pct-h6">0%</div></button>
+          <button data-win="h24" class="gt-tab active"><span>24H</span><div class="gt-pct" id="pct-h24">0%</div></button>
+      
+          <!-- more menu -->
+          <div class="gt-more">
+            <button id="gt-more-btn" class="gt-tab">…</button>
+            <div id="gt-more-menu" class="gt-menu" style="display:none">
+              <button data-win="m15" class="gt-menu-item"><span>15m</span><div class="gt-pct" id="pct-m15">0%</div></button>
+              <button data-win="m30" class="gt-menu-item"><span>30m</span><div class="gt-pct" id="pct-m30">0%</div></button>
+            </div>
           </div>
-  
-          <div class="gt-stats">
-              <div class="gt-card"><div class="gt-k">Txn</div>      <div class="gt-v" id="tf-txn">—</div></div>
-              <div class="gt-card"><div class="gt-k">Vol</div>      <div class="gt-v" id="tf-vol">—</div></div>
-              <div class="gt-card"><div class="gt-k">Net Buy</div>  <div class="gt-v" id="tf-net">—</div></div>
-              <div class="gt-card"><div class="gt-k">Buys</div>     <div class="gt-v" id="tf-buys">—</div></div>
-              <div class="gt-card"><div class="gt-k">Sells</div>    <div class="gt-v" id="tf-sells">—</div></div>
+        </div>
+      
+        <div class="gt-stats">
+          <div class="gt-card">
+            <div class="gt-k" id="lbl-txn">24H Txn</div>
+            <div class="gt-v" id="tf-txn">—</div>
           </div>
+          <div class="gt-card">
+            <div class="gt-k" id="lbl-vol">24H Vol</div>
+            <div class="gt-v" id="tf-vol">—</div>
+          </div>
+          <div class="gt-card"><div class="gt-k">Net Buy</div><div class="gt-v" id="tf-net">—</div></div>
+          <div class="gt-card"><div class="gt-k">Buys</div><div class="gt-v" id="tf-buys">—</div></div>
+          <div class="gt-card"><div class="gt-k">Sells</div><div class="gt-v" id="tf-sells">—</div></div>
+        </div>
       </div>
+
   
       <!-- Always-on KPIs (24h Vol, Liquidity, FDV, Market Cap) -->
       <div class="container" style="margin-top:1.25rem">

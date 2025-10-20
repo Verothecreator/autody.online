@@ -450,10 +450,6 @@ async function warmPriceCache() {
 }
 
 // ======== AUTODY Pool Stats (v2) ========
-const NETWORK_SLUG   = "eth";
-const POOL_ADDRESS   = "0x50f7e4b8a5151996a32aa1f6da9856ffb2240dcd10b1afa72df3530b41f98cd3".toLowerCase();
-const AUTODY_ADDRESS = "0xAB94A15E2d1a47069f4c6c33326A242Ba20AbD9B".toLowerCase();
-
 const TOTAL_SUPPLY = 106_000_000;   // for FDV
 const CIRC_SUPPLY  = null;          // set to a number to enable Market Cap
 

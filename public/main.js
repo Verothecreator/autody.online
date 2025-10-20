@@ -1,8 +1,7 @@
-// ===== Join Community (Google Sheets + custom messages via iframe bridge) =====
+// ===== Join Community (Google Sheets via JSONP, with status messages) =====
 document.addEventListener("DOMContentLoaded", () => {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbz4OoId6YfogVy_VSoMWM7HR84amjlGb0NZZ9l6lmU1EIjeMw6D7fnbKDBEmvuVF89UYQ/exec";
-  const IFRAME_ID = "join-bridge-iframe";
 
   const joinBtn    = document.getElementById("join-community-btn");
   const joinPopup  = document.getElementById("join-popup");
@@ -14,53 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!joinBtn) return;
 
-  // Create a hidden iframe once (bridge for CORS-safe responses)
-  function ensureBridge() {
-    let iframe = document.getElementById(IFRAME_ID);
-    if (!iframe) {
-      iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.id = IFRAME_ID;
-      iframe.name = IFRAME_ID;
-      document.body.appendChild(iframe);
-    }
-    return iframe;
-  }
-
-  // Listen for responses posted by Apps Script (HtmlService -> postMessage)
-  window.addEventListener("message", (ev) => {
-    const data = ev?.data;
-    if (!data || typeof data !== "object" || !("status" in data)) return;
-
-    let text = "Something went wrong. Please try again.";
-    switch (data.status) {
-      case "success":
-        text = "Thanks! You’re in. Check your inbox soon.";
-        joinForm.reset();
-        setTimeout(() => {
-          joinPopup.style.display = "none";
-          joinMsg.style.display = "none";
-        }, 1200);
-        break;
-      case "duplicate":
-        text = "You’re already on the list 👏";
-        break;
-      case "invalid":
-        text = "Invalid email — please check and try again.";
-        break;
-      case "too_fast":
-        text = "Easy there! Please try again in a few seconds.";
-        break;
-      case "error":
-        text = data.message || text;
-        break;
-    }
-    joinMsg.textContent = text;
-    joinMsg.style.display = "block";
-    joinSubmit.disabled = false;
-  });
-
-  // Open / close popup
+  // Open / close
   joinBtn.addEventListener("click", (e) => {
     e.preventDefault();
     joinPopup.style.display = "flex";
@@ -73,7 +26,28 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.target === joinPopup) joinPopup.style.display = "none";
   });
 
-  // Submit → POST via hidden iframe (so we can read the JSON status)
+  // JSONP helper
+  function sendJSONP(url, params, cbName, onComplete) {
+    const qs = new URLSearchParams({ ...params, callback: cbName, ts: String(Date.now()) });
+    const script = document.createElement("script");
+    script.src = `${url}?${qs.toString()}`;
+    script.async = true;
+    script.onerror = () => {
+      onComplete({ status: "error", message: "Network error" });
+      cleanup();
+    };
+    function cleanup() {
+      try { script.remove(); } catch {}
+      try { delete window[cbName]; } catch {}
+    }
+    window[cbName] = (data) => {
+      onComplete(data || { status: "error" });
+      cleanup();
+    };
+    document.body.appendChild(script);
+  }
+
+  // Submit handler
   joinForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const email = joinEmail.value.trim();
@@ -84,32 +58,40 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Build a one-time form that targets the hidden iframe
-    ensureBridge();
-    const tempForm = document.createElement("form");
-    tempForm.action = APPS_SCRIPT_URL;
-    tempForm.method = "POST";
-    tempForm.target = IFRAME_ID;
-    tempForm.style.display = "none";
-
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = "email";
-    input.value = email;
-    tempForm.appendChild(input);
-
-    document.body.appendChild(tempForm);
-
-    // UI feedback
     joinSubmit.disabled = true;
     joinMsg.textContent = "Submitting…";
     joinMsg.style.display = "block";
 
-    // Fire!
-    tempForm.submit();
-
-    // Cleanup the temporary form shortly after submit
-    setTimeout(() => tempForm.remove(), 1000);
+    // unique callback name per request
+    const cbName = `joinCb_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    sendJSONP(APPS_SCRIPT_URL, { email }, cbName, (res) => {
+      let text = "Something went wrong. Please try again.";
+      switch (res.status) {
+        case "success":
+          text = "Thanks! You’re in. Check your inbox soon.";
+          joinForm.reset();
+          setTimeout(() => {
+            joinPopup.style.display = "none";
+            joinMsg.style.display = "none";
+          }, 1200);
+          break;
+        case "duplicate":
+          text = "You’re already on the list 👏";
+          break;
+        case "invalid":
+          text = "Invalid email — please check and try again.";
+          break;
+        case "too_fast":
+          text = "Easy there! Please try again in a few seconds.";
+          break;
+        case "error":
+          text = res.message || text;
+          break;
+      }
+      joinMsg.textContent = text;
+      joinMsg.style.display = "block";
+      joinSubmit.disabled = false;
+    });
   });
 });
 

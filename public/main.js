@@ -527,54 +527,51 @@ async function ensureTrades(){
   return cachedTrades;
 }
 
-// --- CoinGecko token snapshot (contract-based)
-async function cgFetchByContract() {
-  const base = "https://api.coingecko.com/api/v3/coins/ethereum/contract";
-  const url  = `${base}/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
-  const res  = await fetch(url, { headers: { "Accept": "application/json" } });
-  if (!res.ok) throw new Error(`CG HTTP ${res.status}`);
+// --- CoinGecko + GeckoTerminal unified KPIs (no supply fields) ---
+async function fetchFromCoinGecko() {
+  const url = `https://api.coingecko.com/api/v3/coins/ethereum/contract/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
   return res.json();
 }
 
-async function updateKpis(){
+async function updateKpis() {
   try {
-    // 1) CoinGecko: price, market cap, FDV, supplies
+    // 1️⃣  CoinGecko data (FDV, Market Cap, 24h Vol)
     let cg = null;
-    try { cg = await cgFetchByContract(); } catch (e) { console.warn("CG fetch failed:", e); }
+    try { cg = await fetchFromCoinGecko(); } 
+    catch (e) { console.warn("CoinGecko fetch failed:", e); }
 
-    const md     = cg?.market_data || {};
-    const cgPx   = Number(md?.current_price?.usd);
-    const cgMC   = Number(md?.market_cap?.usd);
-    const cgFDV  = Number(md?.fully_diluted_valuation?.usd);
-    const cgCirc = Number(md?.circulating_supply);
-    const cgTot  = Number(md?.total_supply);
+    const md = cg?.market_data || {};
+    const cgVol24 = Number(md.total_volume?.usd);
+    const cgMCap  = Number(md.market_cap?.usd);
+    const cgFDV   = Number(md.fully_diluted_valuation?.usd);
 
-    // Fallback price if CG didn’t return it
-    const price = isFinite(cgPx) ? cgPx : (typeof getAutodyPriceUSD==="function" ? await getAutodyPriceUSD() : null);
-
-    // If FDV missing, compute from CG total_supply (not hard-coded)
-    const fdv = isFinite(cgFDV) ? cgFDV : (isFinite(price) && isFinite(cgTot) ? price * cgTot : null);
-
-    // 2) GeckoTerminal: liquidity & 24h volume (pool-level, most accurate for DEX)
-    let liqUSD = null, vol24 = null;
+    // 2️⃣  GeckoTerminal liquidity (still the most accurate for DEX pools)
+    let gtLiq = null;
     try {
       const pool = await gtFetchPool();
-      const a = pool?.data?.attributes || {};
-      liqUSD = Number(a?.reserve_in_usd) || null;
-      vol24  = Number(a?.volume_usd?.h24 ?? a?.volume_usd_24h ?? 0) || 0;
+      gtLiq = Number(pool?.data?.attributes?.reserve_in_usd) || null;
     } catch (e) {
-      console.warn("GT pool fetch failed:", e);
+      console.warn("GeckoTerminal liquidity fetch failed:", e);
     }
 
-    // 3) Paint the UI
-    if (elKPI.vol24) elKPI.vol24.textContent = fmtUSD(vol24, 0);
-    if (elKPI.liq)   elKPI.liq.textContent   = fmtUSD(liqUSD, 0);
-    if (elKPI.fdv)   elKPI.fdv.textContent   = isFinite(fdv)  ? fmtUSD(fdv, 0)  : "—";
-    if (elKPI.mcap)  elKPI.mcap.textContent  = isFinite(cgMC) ? fmtUSD(cgMC, 0) : "—";
-  } catch (e){
-    console.error("KPI update failed:", e);
+    // 3️⃣  Paint to UI
+    if (elKPI.vol24) elKPI.vol24.textContent = Number.isFinite(cgVol24) ? fmtUSD(cgVol24, 0) : "—";
+    if (elKPI.liq)   elKPI.liq.textContent   = Number.isFinite(gtLiq)   ? fmtUSD(gtLiq, 0)   : "—";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = Number.isFinite(cgFDV)   ? fmtUSD(cgFDV, 0)   : "—";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = Number.isFinite(cgMCap)  ? fmtUSD(cgMCap, 0)  : "—";
+
+  } catch (err) {
+    console.error("updateKpis failed:", err);
   }
 }
+
+// --- auto refresh every minute ---
+document.addEventListener("DOMContentLoaded", () => {
+  updateKpis();
+  setInterval(updateKpis, 60_000);
+});
 
 async function updateTimeframe(winKey){
   try {

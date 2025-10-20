@@ -351,3 +351,61 @@ setInterval(async () => {
 async function warmPriceCache() {
   await getAutodyPriceUSD();
 }
+
+// ===== Join Community (Email capture) =====
+document.addEventListener("DOMContentLoaded", () => {
+  const joinBtn   = document.getElementById("join-community-btn");
+  const joinPopup = document.getElementById("join-popup");
+  const joinClose = document.getElementById("join-close");
+  const joinForm  = document.getElementById("join-form");
+  const joinEmail = document.getElementById("join-email");
+  const joinMsg   = document.getElementById("join-msg");
+
+  if (!joinBtn) return; // safety
+
+  joinBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    joinPopup.style.display = "flex";
+    joinMsg.style.display = "none";
+    joinForm.reset();
+    joinEmail.focus();
+  });
+
+  joinClose.addEventListener("click", () => {
+    joinPopup.style.display = "none";
+  });
+
+  joinPopup.addEventListener("click", (e) => {
+    if (e.target === joinPopup) joinPopup.style.display = "none";
+  });
+
+  joinForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = joinEmail.value.trim();
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+    if (!isValid) {
+      joinMsg.textContent = "Please enter a valid email address.";
+      joinMsg.style.display = "block";
+      return;
+    }
+
+    try {
+      localStorage.setItem("autodyCommunityEmail", email);
+      joinMsg.textContent = "Thanks! You’re in. Check your inbox soon.";
+      joinMsg.style.display = "block";
+      joinForm.reset();
+
+      setTimeout(() => {
+        joinPopup.style.display = "none";
+        joinMsg.style.display = "none";
+      }, 1200);
+    } catch (err) {
+      console.error(err);
+      joinMsg.textContent = "Something went wrong. Please try again.";
+      joinMsg.style.display = "block";
+    }
+  });
+});
+
+

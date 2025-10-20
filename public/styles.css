@@ -393,3 +393,11 @@ h1, h2, h3 {
 .gt-k{font-size:.85rem;color:#9aa3b2;margin-bottom:.25rem}
 .gt-v{font-weight:700}
 @media (max-width:768px){.gt-stats{grid-template-columns:repeat(2,1fr)}}
+.gt-tab{display:flex;flex-direction:column;align-items:center;gap:2px}
+.gt-pct{font-size:.78rem;opacity:.85}
+.gt-more{position:relative}
+.gt-menu{position:absolute;right:0;top:110%;background:#1c1f2b;border:1px solid #2a2f45;border-radius:10px;padding:.25rem;min-width:88px;z-index:5}
+.gt-menu-item{display:flex;justify-content:space-between;align-items:center;width:100%;padding:.35rem .5rem;border:none;background:transparent;color:#ddd;border-radius:8px;cursor:pointer}
+.gt-menu-item:hover{background:#24283a}
+.pct-pos{color:#2ecc71}
+.pct-neg{color:#e74c3c}

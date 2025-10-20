@@ -51,40 +51,37 @@
   
       <div class="token-data">
         <p><strong>Token Symbol:</strong> AU</p>
-        <p><strong>Contract:</strong> <span id="td-contract">0xAB94...bD9B</span></p>
         <p><strong>Chain:</strong> Ethereum</p>
       </div>
   
-      <div class="status-boxes">
-        <div class="status-item">
-          <h3>Price</h3>
-          <p id="td-price">—</p>
-        </div>
-        <div class="status-item">
-          <h3>24h Change</h3>
-          <p id="td-change">—</p>
-        </div>
-        <div class="status-item">
-          <h3>24h Volume</h3>
-          <p id="td-volume">—</p>
-        </div>
-        <div class="status-item">
-          <h3>Liquidity</h3>
-          <p id="td-liquidity">—</p>
-        </div>
-        <div class="status-item">
-          <h3>Total Supply</h3>
-          <p id="td-supply">106,000,000</p>
-        </div>
-        <div class="status-item">
-          <h3>FDV</h3>
-          <p id="td-fdv">—</p>
-        </div>
+      <!-- Timeframe stats (like CG tabs) -->
+      <div class="container" style="margin-top:1.25rem">
+          <div class="gt-tabs" id="gt-tabs">
+              <button data-win="5m"  class="gt-tab active">5M</button>
+              <button data-win="1h"  class="gt-tab">1H</button>
+              <button data-win="6h"  class="gt-tab">6H</button>
+              <button data-win="24h" class="gt-tab">24H</button>
+          </div>
+  
+          <div class="gt-stats">
+              <div class="gt-card"><div class="gt-k">Txn</div>      <div class="gt-v" id="tf-txn">—</div></div>
+              <div class="gt-card"><div class="gt-k">Vol</div>      <div class="gt-v" id="tf-vol">—</div></div>
+              <div class="gt-card"><div class="gt-k">Net Buy</div>  <div class="gt-v" id="tf-net">—</div></div>
+              <div class="gt-card"><div class="gt-k">Buys</div>     <div class="gt-v" id="tf-buys">—</div></div>
+              <div class="gt-card"><div class="gt-k">Sells</div>    <div class="gt-v" id="tf-sells">—</div></div>
+          </div>
       </div>
   
-      <div class="chart-box">
-        <canvas id="stockChart"></canvas>
+      <!-- Always-on KPIs (24h Vol, Liquidity, FDV, Market Cap) -->
+      <div class="container" style="margin-top:1.25rem">
+          <div class="gt-stats">
+              <div class="gt-card"><div class="gt-k">24h Vol</div>    <div class="gt-v" id="kpi-vol24">—</div></div>
+              <div class="gt-card"><div class="gt-k">Liquidity</div>  <div class="gt-v" id="kpi-liq">—</div></div>
+              <div class="gt-card"><div class="gt-k">FDV</div>        <div class="gt-v" id="kpi-fdv">—</div></div>
+              <div class="gt-card"><div class="gt-k">Market Cap</div> <div class="gt-v" id="kpi-mcap">—</div></div>
+          </div>
       </div>
+  
     </div>
   </section>
 

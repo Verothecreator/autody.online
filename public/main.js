@@ -1,4 +1,4 @@
-// ===== Join Community (Email capture) =====
+// ===== Join Community (Email capture connected to Google Sheets) =====
 document.addEventListener("DOMContentLoaded", () => {
   const joinBtn   = document.getElementById("join-community-btn");
   const joinPopup = document.getElementById("join-popup");
@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!joinBtn) return; // safety
 
+  // Open popup
   joinBtn.addEventListener("click", (e) => {
     e.preventDefault();
     joinPopup.style.display = "flex";
@@ -17,14 +18,17 @@ document.addEventListener("DOMContentLoaded", () => {
     joinEmail.focus();
   });
 
+  // Close popup (X)
   joinClose.addEventListener("click", () => {
     joinPopup.style.display = "none";
   });
 
+  // Close when clicking the backdrop
   joinPopup.addEventListener("click", (e) => {
     if (e.target === joinPopup) joinPopup.style.display = "none";
   });
 
+  // Form submit handler
   joinForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = joinEmail.value.trim();
@@ -37,17 +41,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      localStorage.setItem("autodyCommunityEmail", email);
+      // ✅ Send email to your Google Apps Script endpoint
+      await fetch("https://script.google.com/macros/s/AKfycbz4OoId6YfogVy_VSoMWM7HR84amjlGb0NZZ9l6lmU1EIjeMw6D7fnbKDBEmvuVF89UYQ/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ email })
+      });
+
+      // ✅ Success feedback
       joinMsg.textContent = "Thanks! You’re in. Check your inbox soon.";
       joinMsg.style.display = "block";
       joinForm.reset();
 
+      // Close popup after a short delay
       setTimeout(() => {
         joinPopup.style.display = "none";
         joinMsg.style.display = "none";
       }, 1200);
     } catch (err) {
-      console.error(err);
+      console.error("Join Community error:", err);
       joinMsg.textContent = "Something went wrong. Please try again.";
       joinMsg.style.display = "block";
     }

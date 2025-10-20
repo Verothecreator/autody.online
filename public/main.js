@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // ✅ Send email to your Google Apps Script endpoint
       await fetch("https://script.google.com/macros/s/AKfycbz4OoId6YfogVy_VSoMWM7HR84amjlGb0NZZ9l6lmU1EIjeMw6D7fnbKDBEmvuVF89UYQ/exec", {
         method: "POST",
+        mode: "no-cors",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ email })
       });

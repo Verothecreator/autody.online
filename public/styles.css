@@ -385,3 +385,11 @@ h1, h2, h3 {
   object-fit: contain;
 }
 
+.gt-tabs{display:flex;gap:.5rem}
+.gt-tab{background:#1c1f2b;border:1px solid #2a2f45;color:#ddd;padding:.4rem .7rem;border-radius:8px;cursor:pointer}
+.gt-tab.active{background:#5d5fef;color:#fff;border-color:#5d5fef}
+.gt-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem;margin-top:.75rem}
+.gt-card{background:#1c1f2b;border:1px solid #2a2f45;border-radius:10px;padding:.8rem}
+.gt-k{font-size:.85rem;color:#9aa3b2;margin-bottom:.25rem}
+.gt-v{font-weight:700}
+@media (max-width:768px){.gt-stats{grid-template-columns:repeat(2,1fr)}}

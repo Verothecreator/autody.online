@@ -48,24 +48,40 @@
   <section class="token-info">
     <div class="container">
       <h2>Token Details</h2>
+  
       <div class="token-data">
-        <p><strong>Token Symbol:</strong> $AUTODY</p>
-        <p><strong>Status:</strong> Audited (In Progress)</p>
+        <p><strong>Token Symbol:</strong> AU</p>
+        <p><strong>Contract:</strong> <span id="td-contract">0xAB94...bD9B</span></p>
+        <p><strong>Chain:</strong> Ethereum</p>
       </div>
+  
       <div class="status-boxes">
         <div class="status-item">
+          <h3>Price</h3>
+          <p id="td-price">—</p>
+        </div>
+        <div class="status-item">
+          <h3>24h Change</h3>
+          <p id="td-change">—</p>
+        </div>
+        <div class="status-item">
+          <h3>24h Volume</h3>
+          <p id="td-volume">—</p>
+        </div>
+        <div class="status-item">
+          <h3>Liquidity</h3>
+          <p id="td-liquidity">—</p>
+        </div>
+        <div class="status-item">
           <h3>Total Supply</h3>
-          <p>106,000,000</p>
+          <p id="td-supply">106,000,000</p>
         </div>
         <div class="status-item">
-          <h3>Market Cap</h3>
-          <p>$— (coming soon)</p>
-        </div>
-        <div class="status-item">
-          <h3>Circulating Supply</h3>
-          <p>— (TBA)</p>
+          <h3>FDV</h3>
+          <p id="td-fdv">—</p>
         </div>
       </div>
+  
       <div class="chart-box">
         <canvas id="stockChart"></canvas>
       </div>

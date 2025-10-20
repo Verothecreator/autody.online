@@ -15,7 +15,7 @@
           <p>Powering the New Autonomous Economy</p>
           <div class="cta-buttons">
             <a href="https://etherscan.io" target="_blank" class="btn">View on Etherscan</a>  
-            <a href="#" class="btn secondary">Join Community</a>
+            <a href="#" id="join-community-btn" class="btn secondary">Join Community</a>
           </div>
         </div>
         <img src="Autody-Logo.png" alt="Autody Logo" class="autody-logo" />
@@ -156,6 +156,27 @@
             Ledger
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Community Email Popup -->
+  <div id="join-popup" class="popup-overlay">
+    <div class="popup-content">
+      <span id="join-close" class="close-btn">&times;</span>
+      <div class="buy-card">
+        <h2>Join the Autody Community</h2>
+        <p>Get early drops, updates, and perks straight to your inbox.</p>
+  
+        <form id="join-form" novalidate>
+          <div class="form-group">
+            <label for="join-email">Email</label>
+            <input type="email" id="join-email" placeholder="you@example.com" required />
+          </div>
+  
+          <button type="submit" class="buy-btn" id="join-submit">Join</button>
+          <p id="join-msg" class="secure" style="display:none;"></p>
+        </form>
       </div>
     </div>
   </div>

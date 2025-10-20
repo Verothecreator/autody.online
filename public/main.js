@@ -449,78 +449,59 @@ async function warmPriceCache() {
   await getAutodyPriceUSD();
 }
 
-// ======== CONFIG ========
+// ======== AUTODY Pool Stats (v2) ========
 const NETWORK_SLUG   = "eth";
 const POOL_ADDRESS   = "0x50f7e4b8a5151996a32aa1f6da9856ffb2240dcd10b1afa72df3530b41f98cd3".toLowerCase();
 const AUTODY_ADDRESS = "0xAB94A15E2d1a47069f4c6c33326A242Ba20AbD9B".toLowerCase();
 
-const TOTAL_SUPPLY = 106_000_000;  // full supply, for FDV
-const CIRC_SUPPLY  = null;         // set a number to enable Market Cap (price * circ)
+const TOTAL_SUPPLY = 106_000_000;   // for FDV
+const CIRC_SUPPLY  = null;          // set to a number to enable Market Cap
 
-// ======== HELPERS ========
-const fmtUSD = (n, fd=0)=> (n==null||!isFinite(n)) ? "—" :
-  new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:fd}).format(n);
-const fmtUSDc=(n)=>fmtUSD(n,6);
+// ---- format helpers
+const fmtUSD  = (n, fd=0)=> (n==null||!isFinite(n)) ? "—"
+  : new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:fd}).format(n);
+const fmtUSDc = (n)=>fmtUSD(n,6);
 
-// time windows in minutes
-const WINDOWS_MIN = { "5m":5, "1h":60, "6h":360, "24h":1440 };
-
-// ======== GECKOTERMINAL FETCHERS ========
-// Pool snapshot (gives liquidity & 24h volume windows). GT public endpoints are cached ~1 min.
-async function gtFetchPool() {
+// ---- GT fetchers
+async function gtFetchPool(){
   const url = `https://api.geckoterminal.com/api/v2/networks/${NETWORK_SLUG}/pools/${POOL_ADDRESS}`;
-  const res = await fetch(url,{headers:{"Accept":"application/json"}});
-  if(!res.ok) throw new Error(`pool ${res.status}`);
+  const res = await fetch(url,{ headers:{ "Accept":"application/json" }});
+  if (!res.ok) throw new Error(`GT pool HTTP ${res.status}`);
   return res.json();
 }
-
-// Recent trades (last ~300 in past 24h). We filter client-side into 5m/1h/6h/24h buckets.
 async function gtFetchTrades(limit=300){
   const url = `https://api.geckoterminal.com/api/v2/networks/${NETWORK_SLUG}/pools/${POOL_ADDRESS}/trades?limit=${limit}`;
-  const res = await fetch(url,{headers:{"Accept":"application/json"}});
-  if(!res.ok) throw new Error(`trades ${res.status}`);
+  const res = await fetch(url,{ headers:{ "Accept":"application/json" }});
+  if (!res.ok) throw new Error(`GT trades HTTP ${res.status}`);
   return res.json();
 }
 
-// ======== AGGREGATION ========
-function cutoffForWindow(winKey){
-  const mins = WINDOWS_MIN[winKey] || 5;
-  return Date.now() - mins*60*1000;
-}
+// ---- aggregate trades into time windows
+const WINDOWS_MIN = { "5m":5, "1h":60, "6h":360, "24h":1440 };
+function cutoffForWindow(winKey){ return Date.now() - (WINDOWS_MIN[winKey]||5)*60*1000; }
 
-/**
- * Aggregate trades into: txn count, volUSD, buysUSD, sellsUSD, netBuyUSD
- * We treat "buy" as trades where AUTODY is the token bought (you can flip if your pool orientation differs).
- */
 function aggregateTrades(tradesJson, winKey){
   const cutoff = cutoffForWindow(winKey);
   const list = tradesJson?.data || [];
   let txn=0, vol=0, buys=0, sells=0;
 
-  for(const t of list){
-    const att = t?.attributes || {};
-    const ts  = (att?.block_timestamp ? new Date(att.block_timestamp).getTime() : 0);
-    if(ts < cutoff) continue;
+  for (const t of list){
+    const a   = t?.attributes || {};
+    const ts  = a.block_timestamp ? new Date(a.block_timestamp).getTime() : 0;
+    if (ts < cutoff) continue;
 
-    const side = (att?.trade_type || "").toLowerCase(); // "buy" or "sell"
-    const usd  = Number(att?.amount_usd ?? att?.total_value_usd ?? 0);
-    if(!isFinite(usd) || usd<=0) continue;
+    const side = String(a.trade_type||"").toLowerCase();       // "buy" or "sell"
+    const usd  = Number(a.amount_usd ?? a.total_value_usd ?? 0);
+    if (!isFinite(usd) || usd <= 0) continue;
 
-    txn += 1;
-    vol += usd;
-    if(side === "buy") buys += usd; else if(side === "sell") sells += usd;
+    txn += 1; vol += usd;
+    if (side === "buy") buys += usd;
+    else if (side === "sell") sells += usd;
   }
-
-  return {
-    txn,
-    volUSD: vol,
-    buysUSD: buys,
-    sellsUSD: sells,
-    netBuyUSD: buys - sells
-  };
+  return { txn, volUSD: vol, buysUSD: buys, sellsUSD: sells, netBuyUSD: buys - sells };
 }
 
-// ======== DOM TARGETS ========
+// ---- DOM refs
 const elTF = {
   txn:   document.getElementById("tf-txn"),
   vol:   document.getElementById("tf-vol"),
@@ -535,76 +516,83 @@ const elKPI = {
   mcap:  document.getElementById("kpi-mcap"),
 };
 
-// ======== UPDATE LOOPS ========
 let cachedTrades = null, tradesTs = 0;
-const TRADES_TTL = 50*1000; // ~50s (GT caches ~60s)
+const TRADES_TTL = 50_000; // GT caches ~60s
 
 async function ensureTrades(){
   const now = Date.now();
-  if(!cachedTrades || (now - tradesTs) > TRADES_TTL){
-    cachedTrades = await gtFetchTrades(300);
-    tradesTs = now;
+  if (!cachedTrades || (now - tradesTs) > TRADES_TTL){
+    try {
+      cachedTrades = await gtFetchTrades(300);
+      tradesTs = now;
+    } catch (e){
+      console.error("fetch trades failed:", e);
+      throw e;
+    }
   }
   return cachedTrades;
 }
 
 async function updateKpis(){
-  try{
-    // price (you already have this helper in your file)
-    const price = await getAutodyPriceUSD();
+  try {
+    // price via your existing helper
+    const price = (typeof getAutodyPriceUSD === "function") ? await getAutodyPriceUSD() : null;
 
-    // pool snapshot → liquidity + 24h volume window
     const pool = await gtFetchPool();
     const a = pool?.data?.attributes || {};
-    const liqUSD  = Number(a?.reserve_in_usd) || null;
-    const vol24   = Number(a?.volume_usd?.h24 ?? a?.volume_usd_24h ?? 0) || 0;
+    const liqUSD = Number(a.reserve_in_usd) || null;
+    const vol24  = Number(a?.volume_usd?.h24 ?? a.volume_usd_24h ?? 0) || 0;
 
-    elKPI.vol24 && (elKPI.vol24.textContent = fmtUSD(vol24, 0));
-    elKPI.liq   && (elKPI.liq.textContent   = fmtUSD(liqUSD, 0));
-    elKPI.fdv   && (elKPI.fdv.textContent   = price ? fmtUSD(price*TOTAL_SUPPLY, 0) : "—");
-    elKPI.mcap  && (elKPI.mcap.textContent  = (price && CIRC_SUPPLY) ? fmtUSD(price*CIRC_SUPPLY, 0) : "—");
-  }catch(e){
-    console.warn("KPI update failed:", e);
+    if (elKPI.vol24) elKPI.vol24.textContent = fmtUSD(vol24, 0);
+    if (elKPI.liq)   elKPI.liq.textContent   = fmtUSD(liqUSD, 0);
+    if (elKPI.fdv)   elKPI.fdv.textContent   = (price ? fmtUSD(price * TOTAL_SUPPLY, 0) : "—");
+    if (elKPI.mcap)  elKPI.mcap.textContent  = (price && CIRC_SUPPLY) ? fmtUSD(price * CIRC_SUPPLY, 0) : "—";
+  } catch (e){
+    console.error("KPI update failed:", e);
   }
 }
 
 async function updateTimeframe(winKey){
-  try{
+  try {
     const trades = await ensureTrades();
     const agg = aggregateTrades(trades, winKey);
 
-    elTF.txn  && (elTF.txn.textContent  = agg.txn.toString());
-    elTF.vol  && (elTF.vol.textContent  = fmtUSD(agg.volUSD, 0));
-    elTF.net  && (elTF.net.textContent  = fmtUSD(agg.netBuyUSD, 0));
-    elTF.buys && (elTF.buys.textContent = fmtUSD(agg.buysUSD, 0));
-    elTF.sells&& (elTF.sells.textContent= fmtUSD(agg.sellsUSD, 0));
-  }catch(e){
-    console.warn("TF update failed:", e);
+    if (elTF.txn)   elTF.txn.textContent   = agg.txn.toString();
+    if (elTF.vol)   elTF.vol.textContent   = fmtUSD(agg.volUSD, 0);
+    if (elTF.net)   elTF.net.textContent   = fmtUSD(agg.netBuyUSD, 0);
+    if (elTF.buys)  elTF.buys.textContent  = fmtUSD(agg.buysUSD, 0);
+    if (elTF.sells) elTF.sells.textContent = fmtUSD(agg.sellsUSD, 0);
+  } catch (e){
+    console.error("TF update failed:", e);
   }
 }
 
-// ======== TAB WIRING ========
+// ---- Tabs (default = 24H)
 function wireTabs(){
   const tabs = document.querySelectorAll("#gt-tabs .gt-tab");
-  let current = "5m";
+  let current = "24h"; // default requested
+
   const setActive = (key)=>{
     tabs.forEach(b=>b.classList.toggle("active", b.dataset.win===key));
   };
+
   tabs.forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
+    btn.addEventListener("click", ()=>{
       const key = btn.dataset.win;
-      setActive(key);
       current = key;
+      setActive(current);
       updateTimeframe(current);
     });
   });
 
-  // initial paint + refresh loops
+  // first paint
   setActive(current);
   updateTimeframe(current);
   updateKpis();
-  setInterval(()=>updateTimeframe(current), 60_000); // refresh TF view
-  setInterval(updateKpis, 60_000);                    // refresh KPIs
+
+  // refresh every minute (GT cache window)
+  setInterval(()=>updateTimeframe(current), 60_000);
+  setInterval(updateKpis, 60_000);
 }
 
 document.addEventListener("DOMContentLoaded", wireTabs);

@@ -1,15 +1,66 @@
-// ===== Join Community (Email capture connected to Google Sheets) =====
+// ===== Join Community (Google Sheets + custom messages via iframe bridge) =====
 document.addEventListener("DOMContentLoaded", () => {
-  const joinBtn   = document.getElementById("join-community-btn");
-  const joinPopup = document.getElementById("join-popup");
-  const joinClose = document.getElementById("join-close");
-  const joinForm  = document.getElementById("join-form");
-  const joinEmail = document.getElementById("join-email");
-  const joinMsg   = document.getElementById("join-msg");
+  const APPS_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbz4OoId6YfogVy_VSoMWM7HR84amjlGb0NZZ9l6lmU1EIjeMw6D7fnbKDBEmvuVF89UYQ/exec";
+  const IFRAME_ID = "join-bridge-iframe";
 
-  if (!joinBtn) return; // safety
+  const joinBtn    = document.getElementById("join-community-btn");
+  const joinPopup  = document.getElementById("join-popup");
+  const joinClose  = document.getElementById("join-close");
+  const joinForm   = document.getElementById("join-form");
+  const joinEmail  = document.getElementById("join-email");
+  const joinMsg    = document.getElementById("join-msg");
+  const joinSubmit = document.getElementById("join-submit");
 
-  // Open popup
+  if (!joinBtn) return;
+
+  // Create a hidden iframe once (bridge for CORS-safe responses)
+  function ensureBridge() {
+    let iframe = document.getElementById(IFRAME_ID);
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.id = IFRAME_ID;
+      iframe.name = IFRAME_ID;
+      document.body.appendChild(iframe);
+    }
+    return iframe;
+  }
+
+  // Listen for responses posted by Apps Script (HtmlService -> postMessage)
+  window.addEventListener("message", (ev) => {
+    const data = ev?.data;
+    if (!data || typeof data !== "object" || !("status" in data)) return;
+
+    let text = "Something went wrong. Please try again.";
+    switch (data.status) {
+      case "success":
+        text = "Thanks! You’re in. Check your inbox soon.";
+        joinForm.reset();
+        setTimeout(() => {
+          joinPopup.style.display = "none";
+          joinMsg.style.display = "none";
+        }, 1200);
+        break;
+      case "duplicate":
+        text = "You’re already on the list 👏";
+        break;
+      case "invalid":
+        text = "Invalid email — please check and try again.";
+        break;
+      case "too_fast":
+        text = "Easy there! Please try again in a few seconds.";
+        break;
+      case "error":
+        text = data.message || text;
+        break;
+    }
+    joinMsg.textContent = text;
+    joinMsg.style.display = "block";
+    joinSubmit.disabled = false;
+  });
+
+  // Open / close popup
   joinBtn.addEventListener("click", (e) => {
     e.preventDefault();
     joinPopup.style.display = "flex";
@@ -17,53 +68,48 @@ document.addEventListener("DOMContentLoaded", () => {
     joinForm.reset();
     joinEmail.focus();
   });
-
-  // Close popup (X)
-  joinClose.addEventListener("click", () => {
-    joinPopup.style.display = "none";
-  });
-
-  // Close when clicking the backdrop
+  joinClose.addEventListener("click", () => (joinPopup.style.display = "none"));
   joinPopup.addEventListener("click", (e) => {
     if (e.target === joinPopup) joinPopup.style.display = "none";
   });
 
-  // Form submit handler
-  joinForm.addEventListener("submit", async (e) => {
+  // Submit → POST via hidden iframe (so we can read the JSON status)
+  joinForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const email = joinEmail.value.trim();
     const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
     if (!isValid) {
       joinMsg.textContent = "Please enter a valid email address.";
       joinMsg.style.display = "block";
       return;
     }
 
-    try {
-      // ✅ Send email to your Google Apps Script endpoint
-      await fetch("https://script.google.com/macros/s/AKfycbz4OoId6YfogVy_VSoMWM7HR84amjlGb0NZZ9l6lmU1EIjeMw6D7fnbKDBEmvuVF89UYQ/exec", {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ email })
-      });
+    // Build a one-time form that targets the hidden iframe
+    ensureBridge();
+    const tempForm = document.createElement("form");
+    tempForm.action = APPS_SCRIPT_URL;
+    tempForm.method = "POST";
+    tempForm.target = IFRAME_ID;
+    tempForm.style.display = "none";
 
-      // ✅ Success feedback
-      joinMsg.textContent = "Thanks! You’re in. Check your inbox soon.";
-      joinMsg.style.display = "block";
-      joinForm.reset();
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "email";
+    input.value = email;
+    tempForm.appendChild(input);
 
-      // Close popup after a short delay
-      setTimeout(() => {
-        joinPopup.style.display = "none";
-        joinMsg.style.display = "none";
-      }, 1200);
-    } catch (err) {
-      console.error("Join Community error:", err);
-      joinMsg.textContent = "Something went wrong. Please try again.";
-      joinMsg.style.display = "block";
-    }
+    document.body.appendChild(tempForm);
+
+    // UI feedback
+    joinSubmit.disabled = true;
+    joinMsg.textContent = "Submitting…";
+    joinMsg.style.display = "block";
+
+    // Fire!
+    tempForm.submit();
+
+    // Cleanup the temporary form shortly after submit
+    setTimeout(() => tempForm.remove(), 1000);
   });
 });
 

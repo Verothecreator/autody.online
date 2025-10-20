@@ -617,3 +617,146 @@ function wireTabs(){
 }
 
 document.addEventListener("DOMContentLoaded", wireTabs);
+
+// ====== Percentages under tabs + 15m/30m menu + dynamic labels ======
+
+// Map of our windows to minutes for trade aggregation, and to GT price-change keys.
+const WIN_DEFS = {
+  m5:  { mins: 5,   pctKey: "m5",  label: "5M"  },
+  m15: { mins: 15,  pctKey: "m15", label: "15m" },
+  m30: { mins: 30,  pctKey: "m30", label: "30m" },
+  h1:  { mins: 60,  pctKey: "h1",  label: "1H"  },
+  h6:  { mins: 360, pctKey: "h6",  label: "6H"  },
+  h24: { mins: 1440,pctKey: "h24", label: "24H" },
+};
+
+// Update the % badges under each tab from GT pool attributes.price_change_percentage
+async function updateTabPercents(){
+  try {
+    const pool = await gtFetchPool();
+    const a = pool?.data?.attributes || {};
+    const pcp = a?.price_change_percentage || {};
+    const setPct = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (val == null || !isFinite(Number(val))) { el.textContent = "0%"; el.classList.remove("pct-pos","pct-neg"); return; }
+      const n = Number(val);
+      const sign = n > 0 ? "+" : (n < 0 ? "" : "");
+      el.textContent = `${sign}${n.toFixed(2)}%`;
+      el.classList.toggle("pct-pos", n > 0);
+      el.classList.toggle("pct-neg", n < 0);
+    };
+    setPct("pct-m5",  pcp.m5);
+    setPct("pct-m15", pcp.m15);
+    setPct("pct-m30", pcp.m30);
+    setPct("pct-h1",  pcp.h1);
+    setPct("pct-h6",  pcp.h6);
+    setPct("pct-h24", pcp.h24);
+  } catch (e){
+    console.warn("updateTabPercents failed:", e);
+  }
+}
+
+// Label helpers for Txn/Vol headings
+const lblTxn = document.getElementById("lbl-txn");
+const lblVol = document.getElementById("lbl-vol");
+
+function setWindowLabels(key){
+  const def = WIN_DEFS[key] || WIN_DEFS.h24;
+  if (lblTxn) lblTxn.textContent = `${def.label} Txn`;
+  if (lblVol) lblVol.textContent = `${def.label} Vol`;
+}
+
+// Adjust existing aggregator to accept custom window mins
+function cutoffForCustom(mins){
+  return Date.now() - mins*60*1000;
+}
+function aggregateTradesFor(tradesJson, mins){
+  const cutoff = cutoffForCustom(mins);
+  const list = tradesJson?.data || [];
+  let txn=0, vol=0, buys=0, sells=0;
+
+  for (const t of list){
+    const a   = t?.attributes || {};
+    const ts  = a.block_timestamp ? new Date(a.block_timestamp).getTime() : 0;
+    if (ts < cutoff) continue;
+
+    const side = String(a.trade_type||"").toLowerCase();       // "buy" or "sell"
+    const usd  = Number(a.amount_usd ?? a.total_value_usd ?? 0);
+    if (!isFinite(usd) || usd <= 0) continue;
+
+    txn += 1; vol += usd;
+    if (side === "buy") buys += usd;
+    else if (side === "sell") sells += usd;
+  }
+  return { txn, volUSD:vol, buysUSD:buys, sellsUSD:sells, netBuyUSD:buys - sells };
+}
+
+// Wire the tabs + more menu; default = 24H
+function wireEnhancedTabs(){
+  const tabsRow   = document.getElementById("gt-tabs");
+  if (!tabsRow) return;
+
+  const menuBtn   = document.getElementById("gt-more-btn");
+  const menu      = document.getElementById("gt-more-menu");
+  let currentKey  = "h24";
+
+  // open/close menu
+  if (menuBtn && menu){
+    menuBtn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      menu.style.display = (menu.style.display === "none" || !menu.style.display) ? "block" : "none";
+    });
+    document.addEventListener("click", (e)=>{
+      if (!menu.contains(e.target) && e.target !== menuBtn) menu.style.display = "none";
+    });
+  }
+
+  function setActive(key){
+    document.querySelectorAll("#gt-tabs .gt-tab").forEach(btn=>{
+      if (btn.dataset?.win) btn.classList.toggle("active", btn.dataset.win === key);
+    });
+  }
+
+  async function onSelect(key){
+    currentKey = key;
+    const def = WIN_DEFS[key] || WIN_DEFS.h24;
+    setActive(key);
+    setWindowLabels(key);
+    // Trades
+    try {
+      const trades = await ensureTrades(); // you already have ensureTrades()
+      const agg = aggregateTradesFor(trades, def.mins);
+      document.getElementById("tf-txn").textContent   = agg.txn.toString();
+      document.getElementById("tf-vol").textContent   = fmtUSD(agg.volUSD, 0);
+      document.getElementById("tf-net").textContent   = fmtUSD(agg.netBuyUSD, 0);
+      document.getElementById("tf-buys").textContent  = fmtUSD(agg.buysUSD, 0);
+      document.getElementById("tf-sells").textContent = fmtUSD(agg.sellsUSD, 0);
+    } catch (e){
+      console.warn("trade agg failed:", e);
+    }
+  }
+
+  // Clicks for visible tabs
+  tabsRow.querySelectorAll(".gt-tab[data-win]").forEach(btn=>{
+    btn.addEventListener("click", ()=> onSelect(btn.dataset.win));
+  });
+  // Clicks inside menu
+  menu?.querySelectorAll(".gt-menu-item[data-win]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      onSelect(btn.dataset.win);
+      menu.style.display = "none";
+    });
+  });
+
+  // initial paint + periodic refresh
+  setActive(currentKey);
+  setWindowLabels(currentKey);
+  onSelect(currentKey);
+  updateTabPercents();
+  setInterval(()=>onSelect(currentKey), 60_000);
+  setInterval(updateTabPercents, 60_000);
+}
+
+// boot
+document.addEventListener("DOMContentLoaded", wireEnhancedTabs);

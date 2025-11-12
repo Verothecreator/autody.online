@@ -712,92 +712,86 @@ async function fetchGtPool() {
 }
 
 
+// ======= GT-First KPI updater (use GT attributes directly) =======
 async function updateKpis() {
   try {
-    // show loading placeholders so user sees something immediately
+    // immediate UI feedback
     if (elKPI.vol24) elKPI.vol24.textContent = "Loading…";
     if (elKPI.liq)   elKPI.liq.textContent   = "Loading…";
     if (elKPI.fdv)   elKPI.fdv.textContent   = "Loading…";
     if (elKPI.mcap)  elKPI.mcap.textContent  = "Loading…";
 
-    let gtPool = null;
+    // Fetch GT pool (will throw on HTTP error)
+    let poolJson;
     try {
-      gtPool = await fetchGtPool();
-    } catch (gtErr) {
-      console.warn("[updateKpis] GeckoTerminal pool fetch failed:", gtErr?.message || gtErr);
-      gtPool = null;
+      poolJson = await fetchGtPool();
+    } catch (e) {
+      console.warn("[updateKpis] GT pool fetch failed, clearing UI", e?.message || e);
+      if (elKPI.vol24) elKPI.vol24.textContent = "—";
+      if (elKPI.liq)   elKPI.liq.textContent   = "—";
+      if (elKPI.fdv)   elKPI.fdv.textContent   = "—";
+      if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
+      // also set pct to 0% to be safe
+      const pctElErr = document.getElementById("pct-h24");
+      if (pctElErr) { pctElErr.textContent = "0%"; pctElErr.classList.remove("pct-pos","pct-neg"); }
+      return;
     }
 
-    // extract GT values safely
-    let gtReserveUsd = null;
-    let gtVol24 = null;
-    let gtPriceChange24 = null;
-    if (gtPool && gtPool.data && gtPool.data.attributes) {
-      const a = gtPool.data.attributes;
-      console.log("[updateKpis] GT attributes keys:", Object.keys(a));
-      gtReserveUsd = Number(a.reserve_in_usd || a.reserve0_in_usd || a.reserve_in_usd_total || 0) || null;
+    const attrs = poolJson?.data?.attributes || {};
+    console.log("[updateKpis] GT attrs keys:", Object.keys(attrs));
 
-      // different GT responses use different names: try several
-      gtVol24 = Number(a.volume_in_usd ?? a.volume_usd ?? a.total_volume_usd ?? a.volume_24h ?? 0) || null;
+    // GT uses these keys (based on your logs)
+    const reserveUsd = Number(attrs.reserve_in_usd ?? attrs.reserve0_in_usd ?? attrs.reserve_in_usd_total ?? 0) || null;
+    const vol24      = Number(attrs.volume_usd ?? attrs.volume_in_usd ?? attrs.total_volume_usd ?? 0) || null;
+    const fdv        = Number(attrs.fdv_usd ?? attrs.fdv ?? 0) || null;
+    const mcap       = Number(attrs.market_cap_usd ?? attrs.market_cap ?? 0) || null;
 
-      const pcp = a.price_change_percentage || {};
-      gtPriceChange24 = Number(pcp.h24 ?? pcp['24h'] ?? pcp.h24 ?? NaN);
-      if (!isFinite(gtPriceChange24)) gtPriceChange24 = null;
-    } else {
-      console.log("[updateKpis] No GT pool attributes found.");
+    // price_change_percentage can be object { h24, h1, m5... } or a single number
+    let priceChange24 = null;
+    const pcp = attrs.price_change_percentage;
+    if (pcp != null) {
+      if (typeof pcp === "object") {
+        priceChange24 = Number(pcp.h24 ?? pcp['24h'] ?? pcp.h24);
+      } else {
+        priceChange24 = Number(pcp);
+      }
+      if (!isFinite(priceChange24)) priceChange24 = null;
     }
 
-    let cg = null;
-    try {
-      cg = await fetchFromCoinGecko();
-    } catch (cgErr) {
-      console.warn("[updateKpis] CoinGecko fetch failed:", cgErr?.message || cgErr);
-      cg = null;
-    }
+    console.log("[updateKpis] reserveUsd:", reserveUsd, "vol24:", vol24, "fdv:", fdv, "mcap:", mcap, "pcp24:", priceChange24);
 
-    const md = cg?.market_data || {};
-    const cgVol24 = Number(md.total_volume?.usd) || null;
-    const cgMCap  = Number(md.market_cap?.usd) || null;
-    const cgFDV   = Number(md.fully_diluted_valuation?.usd) || null;
+    // Render (use your fmtUSD helper)
+    if (elKPI.vol24) elKPI.vol24.textContent = vol24 ? fmtUSD(vol24, 0) : "—";
+    if (elKPI.liq)   elKPI.liq.textContent   = reserveUsd ? fmtUSD(reserveUsd, 0) : "—";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = fdv ? fmtUSD(fdv, 0) : "—";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = mcap ? fmtUSD(mcap, 0) : "—";
 
-    // prefer GT for vol/liquidity, fallback to CoinGecko when missing
-    const finalVol24 = Number.isFinite(gtVol24) && gtVol24 > 0 ? gtVol24 : (Number.isFinite(cgVol24) ? cgVol24 : null);
-    const finalLiq   = Number.isFinite(gtReserveUsd) && gtReserveUsd > 0 ? gtReserveUsd : null;
-    const finalFDV   = Number.isFinite(cgFDV) ? cgFDV : null;
-    const finalMCap  = Number.isFinite(cgMCap) ? cgMCap : null;
-
-    console.log("[updateKpis] finalVol24:", finalVol24, "finalLiq:", finalLiq, "finalFDV:", finalFDV, "finalMCap:", finalMCap, "gtPriceChange24:", gtPriceChange24);
-
-    if (elKPI.vol24) elKPI.vol24.textContent = finalVol24 ? fmtUSD(finalVol24, 0) : "—";
-    if (elKPI.liq)   elKPI.liq.textContent   = finalLiq   ? fmtUSD(finalLiq, 0)   : "—";
-    if (elKPI.fdv)   elKPI.fdv.textContent   = finalFDV   ? fmtUSD(finalFDV, 0)   : "—";
-    if (elKPI.mcap)  elKPI.mcap.textContent  = finalMCap  ? fmtUSD(finalMCap, 0)  : "—";
-
-    // Update pct-h24 element (price change)
-    const pct24 = gtPriceChange24 ?? Number(md.price_change_percentage_24h) ?? null;
+    // update the 24H pct badge (element id: pct-h24) — prefer GT pcp
     const pctEl = document.getElementById("pct-h24");
     if (pctEl) {
-      if (pct24 != null && isFinite(Number(pct24))) {
-        const n = Number(pct24);
+      if (priceChange24 != null) {
+        const n = Number(priceChange24);
         const sign = n > 0 ? "+" : (n < 0 ? "" : "");
         pctEl.textContent = `${sign}${n.toFixed(2)}%`;
         pctEl.classList.toggle("pct-pos", n > 0);
         pctEl.classList.toggle("pct-neg", n < 0);
       } else {
+        // fallback to 0% if no value
         pctEl.textContent = "0%";
         pctEl.classList.remove("pct-pos","pct-neg");
       }
     }
 
   } catch (err) {
-    console.error("[updateKpis] fatal error:", err);
-    // show placeholders on fatal error
+    console.error("[updateKpis] unexpected error:", err);
     if (elKPI.vol24) elKPI.vol24.textContent = "—";
     if (elKPI.liq)   elKPI.liq.textContent   = "—";
     if (elKPI.fdv)   elKPI.fdv.textContent   = "—";
     if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
   }
 }
+
+// ensure regular refresh (keep your existing DOMContentLoaded wiring)
 
 // Kick off initial update + periodic refresh every 30s (GT caches frequently)
 document.addEventListener("DOMContentLoaded", () => {

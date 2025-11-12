@@ -359,9 +359,9 @@ function launchTransak() {
 const usdInput   = document.getElementById("usdAmount");
 const tokenInput = document.getElementById("tokenAmount");
 
-const AUTODY_ADDRESS = "0xAB94A15E2d1a47069f4c6c33326A242Ba20AbD9B".toLowerCase();
-const NETWORK_SLUG   = "eth";
-const POOL_ADDRESS   = "0x50f7e4b8a5151996a32aa1f6da9856ffb2240dcd10b1afa72df3530b41f98cd3";
+const AUTODY_ADDRESS = "0xa2746a48211cd3cb0fc6356deb10d79feb792c57".toLowerCase(); // new Polygon contract (lowercased)
+const NETWORK_SLUG   = "polygon_pos";   // GeckoTerminal network slug for Polygon (used in GT API endpoints)
+const POOL_ADDRESS   = "0x30dA748C76D1c87b2893035b60fDc50a31439d8D"; // new GeckoTerminal pool pair (case preserved)
 
 let cachedPriceUSD = null;
 let lastPriceTs    = 0;
@@ -529,7 +529,7 @@ async function ensureTrades(){
 
 // --- CoinGecko + GeckoTerminal unified KPIs (no supply fields) ---
 async function fetchFromCoinGecko() {
-  const url = `https://api.coingecko.com/api/v3/coins/ethereum/contract/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
+  const url = `https://api.coingecko.com/api/v3/coins/polygon-pos/contract/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
   const res = await fetch(url, { headers: { "Accept": "application/json" } });
   if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
   return res.json();

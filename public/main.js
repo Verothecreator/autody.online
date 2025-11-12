@@ -680,28 +680,33 @@ async function ensureTrades(){
 
 // ---------- CoinGecko (polygon) + GeckoTerminal KPI updater ----------
 async function fetchFromCoinGecko() {
-  // Fetch contract-based token data from CoinGecko for Polygon POS
-  // Uses: /coins/{platform_id}/contract/{contract_address}
+  const url = `https://api.coingecko.com/api/v3/coins/polygon-pos/contract/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
+  console.log("[CG] Requesting CoinGecko:", url);
   try {
-    const url = `https://api.coingecko.com/api/v3/coins/polygon-pos/contract/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
-    const res = await fetch(url, { headers: { "Accept": "application/json" } });
-    if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
-    return res.json();
+    const res = await fetch(url, { headers: { "Accept": "application/json" }});
+    console.log("[CG] HTTP status:", res.status);
+    if (!res.ok) throw new Error(`CG HTTP ${res.status}`);
+    const json = await res.json();
+    console.log("[CG] response keys:", Object.keys(json || {}));
+    return json;
   } catch (err) {
-    console.warn("fetchFromCoinGecko failed:", err?.message || err);
+    console.warn("[CG] fetch failed:", err?.message || err);
     throw err;
   }
 }
 
 async function fetchGtPool() {
-  // GeckoTerminal pool info (fast, pool-sourced)
+  const url = `https://api.geckoterminal.com/api/v2/networks/${NETWORK_SLUG}/pools/${POOL_ADDRESS}`;
+  console.log("[GT] Requesting pool:", url);
   try {
-    const url = `https://api.geckoterminal.com/api/v2/networks/${NETWORK_SLUG}/pools/${POOL_ADDRESS}`;
     const res = await fetch(url, { headers: { "Accept": "application/json" } });
-    if (!res.ok) throw new Error(`GT pool HTTP ${res.status}`);
-    return res.json();
+    console.log("[GT] HTTP status:", res.status);
+    if (!res.ok) throw new Error(`GT HTTP ${res.status}`);
+    const json = await res.json();
+    console.log("[GT] response keys:", Object.keys(json || {}));
+    return json;
   } catch (err) {
-    console.warn("fetchGtPool failed:", err?.message || err);
+    console.warn("[GT] fetch failed:", err?.message || err);
     throw err;
   }
 }
@@ -709,82 +714,88 @@ async function fetchGtPool() {
 
 async function updateKpis() {
   try {
-    // 1) Try GeckoTerminal pool first (fast, pool authoritative)
+    // show loading placeholders so user sees something immediately
+    if (elKPI.vol24) elKPI.vol24.textContent = "Loading…";
+    if (elKPI.liq)   elKPI.liq.textContent   = "Loading…";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = "Loading…";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = "Loading…";
+
     let gtPool = null;
     try {
       gtPool = await fetchGtPool();
     } catch (gtErr) {
-      // allowed to fall through to CoinGecko fallback
+      console.warn("[updateKpis] GeckoTerminal pool fetch failed:", gtErr?.message || gtErr);
       gtPool = null;
     }
 
-    // Helpful extracted values from GT if available
+    // extract GT values safely
     let gtReserveUsd = null;
     let gtVol24 = null;
     let gtPriceChange24 = null;
-
     if (gtPool && gtPool.data && gtPool.data.attributes) {
       const a = gtPool.data.attributes;
-      // GeckoTerminal attribute names differ across pool types; try common ones
-      gtReserveUsd = Number(a.reserve_in_usd || a.reserve0_in_usd || a.reserve_in_usd_total) || null;
+      console.log("[updateKpis] GT attributes keys:", Object.keys(a));
+      gtReserveUsd = Number(a.reserve_in_usd || a.reserve0_in_usd || a.reserve_in_usd_total || 0) || null;
 
-      // 24h volume may be in several places; try attributes.volume_usd or attributes.volume
-      if (a.volume_in_usd) gtVol24 = Number(a.volume_in_usd);
-      else if (a.volume_usd) gtVol24 = Number(a.volume_usd);
-      else if (a.volume) {
-        // if array-like or object, attempt common paths
-        const vol = a.volume?.h24 ?? a.volume?.'24h' ?? null;
-        gtVol24 = vol ? Number(vol) : null;
-      } else {
-        // some GT payloads contain "volume_usd" under attributes
-        gtVol24 = Number(a.volume_usd ?? a.total_volume_usd ?? 0) || null;
-      }
+      // different GT responses use different names: try several
+      gtVol24 = Number(a.volume_in_usd ?? a.volume_usd ?? a.total_volume_usd ?? a.volume_24h ?? 0) || null;
 
-      // price change percent keys are usually under a.price_change_percentage
       const pcp = a.price_change_percentage || {};
-      gtPriceChange24 = Number(pcp.h24 ?? pcp['24h'] ?? pcp.h24);
+      gtPriceChange24 = Number(pcp.h24 ?? pcp['24h'] ?? pcp.h24 ?? NaN);
       if (!isFinite(gtPriceChange24)) gtPriceChange24 = null;
+    } else {
+      console.log("[updateKpis] No GT pool attributes found.");
     }
 
-    // 2) Fetch CoinGecko as fallback / supplement (FDV & market_data often come from CG)
     let cg = null;
     try {
       cg = await fetchFromCoinGecko();
     } catch (cgErr) {
+      console.warn("[updateKpis] CoinGecko fetch failed:", cgErr?.message || cgErr);
       cg = null;
     }
 
-    // CoinGecko derived values
     const md = cg?.market_data || {};
     const cgVol24 = Number(md.total_volume?.usd) || null;
     const cgMCap  = Number(md.market_cap?.usd) || null;
     const cgFDV   = Number(md.fully_diluted_valuation?.usd) || null;
 
-    // Decide which values to use: prefer GT for vol & liquidity, CG for FDV/MCap where GT lacks them
+    // prefer GT for vol/liquidity, fallback to CoinGecko when missing
     const finalVol24 = Number.isFinite(gtVol24) && gtVol24 > 0 ? gtVol24 : (Number.isFinite(cgVol24) ? cgVol24 : null);
     const finalLiq   = Number.isFinite(gtReserveUsd) && gtReserveUsd > 0 ? gtReserveUsd : null;
     const finalFDV   = Number.isFinite(cgFDV) ? cgFDV : null;
     const finalMCap  = Number.isFinite(cgMCap) ? cgMCap : null;
+
+    console.log("[updateKpis] finalVol24:", finalVol24, "finalLiq:", finalLiq, "finalFDV:", finalFDV, "finalMCap:", finalMCap, "gtPriceChange24:", gtPriceChange24);
 
     if (elKPI.vol24) elKPI.vol24.textContent = finalVol24 ? fmtUSD(finalVol24, 0) : "—";
     if (elKPI.liq)   elKPI.liq.textContent   = finalLiq   ? fmtUSD(finalLiq, 0)   : "—";
     if (elKPI.fdv)   elKPI.fdv.textContent   = finalFDV   ? fmtUSD(finalFDV, 0)   : "—";
     if (elKPI.mcap)  elKPI.mcap.textContent  = finalMCap  ? fmtUSD(finalMCap, 0)  : "—";
 
+    // Update pct-h24 element (price change)
     const pct24 = gtPriceChange24 ?? Number(md.price_change_percentage_24h) ?? null;
-    if (pct24 != null && isFinite(Number(pct24))) {
-      const el = document.getElementById("pct-h24");
-      if (el) {
+    const pctEl = document.getElementById("pct-h24");
+    if (pctEl) {
+      if (pct24 != null && isFinite(Number(pct24))) {
         const n = Number(pct24);
         const sign = n > 0 ? "+" : (n < 0 ? "" : "");
-        el.textContent = `${sign}${n.toFixed(2)}%`;
-        el.classList.toggle("pct-pos", n > 0);
-        el.classList.toggle("pct-neg", n < 0);
+        pctEl.textContent = `${sign}${n.toFixed(2)}%`;
+        pctEl.classList.toggle("pct-pos", n > 0);
+        pctEl.classList.toggle("pct-neg", n < 0);
+      } else {
+        pctEl.textContent = "0%";
+        pctEl.classList.remove("pct-pos","pct-neg");
       }
     }
 
   } catch (err) {
-    console.error("updateKpis failed:", err);
+    console.error("[updateKpis] fatal error:", err);
+    // show placeholders on fatal error
+    if (elKPI.vol24) elKPI.vol24.textContent = "—";
+    if (elKPI.liq)   elKPI.liq.textContent   = "—";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = "—";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
   }
 }
 

@@ -363,6 +363,129 @@ const AUTODY_ADDRESS = "0xa2746a48211cd3cb0fc6356deb10d79feb792c57".toLowerCase(
 const NETWORK_SLUG   = "polygon_pos";   // GeckoTerminal network slug for Polygon (used in GT API endpoints)
 const POOL_ADDRESS   = "0x30dA748C76D1c87b2893035b60fDc50a31439d8D"; // new GeckoTerminal pool pair (case preserved)
 
+const POLYGON_RPC = "https://polygon-rpc.com"; // read-only JSON-RPC endpoint
+
+const ABI_V3 = [
+  "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 obsIndex,uint16 obsCardinality,uint16 obsCardinalityNext,uint8 feeProtocol,bool unlocked)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)"
+];
+const ABI_V2 = [
+  "function getReserves() view returns (uint112 reserve0,uint112 reserve1,uint32 blockTimestampLast)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)"
+];
+const ABI_ERC20 = [
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)"
+];
+
+async function fetchOnchainPoolPrice(poolAddress, targetTokenAddress) {
+  // returns { price: Number, unit: string } where price is decimal number in unit (e.g. "USD" or "USDC" or "MATIC")
+  try {
+    const provider = new ethers.JsonRpcProvider(POLYGON_RPC);
+    const poolV3 = new ethers.Contract(poolAddress, ABI_V3, provider);
+
+    // try v3 first
+    let token0, token1;
+    try {
+      token0 = (await poolV3.token0()).toLowerCase();
+      token1 = (await poolV3.token1()).toLowerCase();
+      const slot0 = await poolV3.slot0();
+      const sqrtPriceX96 = BigInt(slot0[0].toString()); // BigInt
+      // decimals
+      const token0c = Number(await (new ethers.Contract(token0, ABI_ERC20, provider)).decimals());
+      const token1c = Number(await (new ethers.Contract(token1, ABI_ERC20, provider)).decimals());
+
+      // price = (sqrtPriceX96 ** 2) / 2**192 * (10**(token0c - token1c))
+      const numerator = sqrtPriceX96 * sqrtPriceX96; // BigInt
+      const denom = BigInt(1) << BigInt(192);
+      // compute fractional with Number (may lose tiny precision but fine for UI)
+      const raw = Number(numerator) / Number(denom); // token1 per token0 (before decimals adj)
+      const price = raw * Math.pow(10, token0c - token1c);
+
+      // determine which side is AUTODY: if target == token0, then price is token1 per 1 token0 → that's quote/token
+      const target = targetTokenAddress.toLowerCase();
+      const isTargetToken0 = (target === token0);
+
+      let priceInQuote = isTargetToken0 ? price : (1 / price);
+
+      // figure out quote token symbol to return unit
+      const quoteTokenAddr = isTargetToken0 ? token1 : token0;
+      const quoteToken = new ethers.Contract(quoteTokenAddr, ABI_ERC20, provider);
+      let quoteSymbol = "TOKEN";
+      try { quoteSymbol = (await quoteToken.symbol()).toUpperCase(); } catch (e) { /* ignore */ }
+
+      // if quoteSymbol is a USD stablecoin, return USD
+      if (["USDC","USDT","DAI"].includes(quoteSymbol)) {
+        return { price: Number(priceInQuote), unit: "USD" };
+      }
+      // if quote is WMATIC/WETH -> return price in that asset
+      if (["WMATIC","MATIC","WETH","ETH"].includes(quoteSymbol)) {
+        return { price: Number(priceInQuote), unit: quoteSymbol };
+      }
+
+      // otherwise return raw in quote token units
+      return { price: Number(priceInQuote), unit: quoteSymbol };
+    } catch (v3Err) {
+      // not a v3 pool or v3 read failed; try v2 style
+      // console.warn("v3 attempt failed:", v3Err);
+      const poolV2 = new ethers.Contract(poolAddress, ABI_V2, provider);
+      token0 = (await poolV2.token0()).toLowerCase();
+      token1 = (await poolV2.token1()).toLowerCase();
+      const res = await poolV2.getReserves();
+      const reserve0 = BigInt(res[0].toString());
+      const reserve1 = BigInt(res[1].toString());
+
+      const token0c = Number(await (new ethers.Contract(token0, ABI_ERC20, provider)).decimals());
+      const token1c = Number(await (new ethers.Contract(token1, ABI_ERC20, provider)).decimals());
+
+      // price token1 per token0 = (reserve1 / reserve0) * 10^(token0c - token1c)
+      const rawRatio = Number(reserve1) / Number(reserve0);
+      const price = rawRatio * Math.pow(10, token0c - token1c);
+
+      const target = targetTokenAddress.toLowerCase();
+      const isTargetToken0 = (target === token0);
+      const priceInQuote = isTargetToken0 ? price : (1 / price);
+
+      const quoteTokenAddr = isTargetToken0 ? token1 : token0;
+      const quoteToken = new ethers.Contract(quoteTokenAddr, ABI_ERC20, provider);
+      let quoteSymbol = "TOKEN";
+      try { quoteSymbol = (await quoteToken.symbol()).toUpperCase(); } catch (e) {}
+
+      if (["USDC","USDT","DAI"].includes(quoteSymbol)) {
+        return { price: Number(priceInQuote), unit: "USD" };
+      }
+      if (["WMATIC","MATIC","WETH","ETH"].includes(quoteSymbol)) {
+        return { price: Number(priceInQuote), unit: quoteSymbol };
+      }
+      return { price: Number(priceInQuote), unit: quoteSymbol };
+    }
+  } catch (err) {
+    console.warn("fetchOnchainPoolPrice failed:", err);
+    throw err;
+  }
+}
+
+// helper to convert non-USD quote to USD using CoinGecko (used only if onchain quote is MATIC/ETH)
+async function convertQuoteToUSD(amount, unitSymbol) {
+  try {
+    const map = { "WMATIC": "matic", "MATIC": "matic", "WETH": "weth", "ETH": "ethereum" };
+    const slug = map[unitSymbol] || null;
+    if (!slug) return null;
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${slug}&vs_currencies=usd`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const priceUsd = j[slug]?.usd;
+    if (!isFinite(priceUsd)) return null;
+    return Number(amount) * Number(priceUsd);
+  } catch (e) {
+    return null;
+  }
+}
+
+
 let cachedPriceUSD = null;
 let lastPriceTs    = 0;
 const PRICE_TTL_MS = 10_000;
@@ -395,6 +518,33 @@ async function fetchPriceFromPool() {
 async function getAutodyPriceUSD() {
   const now = Date.now();
   if (cachedPriceUSD && now - lastPriceTs < PRICE_TTL_MS) return cachedPriceUSD;
+
+  // 1) Try on-chain pool direct read (fastest, most live)
+  try {
+    const onchain = await fetchOnchainPoolPrice(POOL_ADDRESS, AUTODY_ADDRESS);
+    if (onchain && isFinite(onchain.price)) {
+      if (onchain.unit === "USD") {
+        cachedPriceUSD = onchain.price;
+        lastPriceTs = now;
+        return cachedPriceUSD;
+      }
+      // if unit is MATIC/WETH/etc convert to USD via CoinGecko
+      if (["WMATIC","MATIC","WETH","ETH"].includes(onchain.unit)) {
+        const conv = await convertQuoteToUSD(onchain.price, onchain.unit);
+        if (conv && isFinite(conv)) {
+          cachedPriceUSD = conv;
+          lastPriceTs = now;
+          return cachedPriceUSD;
+        }
+      }
+      // otherwise we don't have a USD valuation for the quote token — fall back
+      console.warn("Onchain returned non-USD quote:", onchain);
+    }
+  } catch (e) {
+    console.warn("Onchain pool price failed, falling back to GT/CoinGecko:", e?.message || e);
+  }
+
+  // 2) Fallback: original approach (GeckoTerminal simple -> pool)
   try {
     const p = await fetchPriceFromGeckoSimple();
     cachedPriceUSD = p; lastPriceTs = now; return p;
@@ -409,6 +559,7 @@ async function getAutodyPriceUSD() {
     }
   }
 }
+
 
 let debounceTimer = null;
 function debounce(fn, wait = 250) {

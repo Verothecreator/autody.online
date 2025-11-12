@@ -615,7 +615,7 @@ async function gtFetchPool(){
   return res.json();
 }
 async function gtFetchTrades(limit=300){
-  const url = `https://api.geckoterminal.com/api/v2/networks/${NETWORK_SLUG}/pools/${POOL_ADDRESS}/trades?limit=${limit}`;
+  const url = `/api/trades?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}&limit=${limit}`;
   const res = await fetch(url,{ headers:{ "Accept":"application/json" }});
   if (!res.ok) throw new Error(`GT trades HTTP ${res.status}`);
   return res.json();

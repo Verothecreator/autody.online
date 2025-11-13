@@ -9,82 +9,67 @@ const PORT = process.env.PORT || 3000;
 const RPC = process.env.POLYGON_RPC || "https://polygon-rpc.com";
 const provider = new ethers.JsonRpcProvider(RPC);
 
-const IUniswapV3PoolABI = [
-  "function slot0() external view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
-  "function liquidity() external view returns (uint128)",
-  "function token0() external view returns (address)",
-  "function token1() external view returns (address)"
-];
-const ERC20_ABI = [
-  "function decimals() view returns (uint8)",
-  "function symbol() view returns (string)"
-];
-
-app.get('/api/v3/pooldata', async (req, res) => {
+// Dexscreener proxy (avoids CORS issues)
+app.get('/api/dex/pair', async (req, res) => {
   try {
-    const { pool } = req.query;
-    if (!pool) return res.status(400).json({ error: 'Missing ?pool=' });
+    const { pair } = req.query;
+    if (!pair) return res.status(400).json({ error: 'Missing ?pair=' });
 
-    const poolContract = new ethers.Contract(pool, IUniswapV3PoolABI, provider);
+    // Dexscreener polygon pair endpoint (no API key)
+    const url = `https://api.dexscreener.com/latest/dex/pairs/polygon/${pair}`;
 
-    // fetch core info
-    const [slot0, liquidity, token0, token1] = await Promise.all([
-      poolContract.slot0(),
-      poolContract.liquidity(),
-      poolContract.token0(),
-      poolContract.token1(),
-    ]);
-
-    // keep big values as strings to avoid BigInt/Number mixing on server
-    const sqrtPriceX96 = slot0[0].toString();
-    const tick = slot0.tick ?? (slot0[1] !== undefined ? slot0[1] : null);
-    const liquidityStr = liquidity.toString();
-
-    // fetch token decimals and symbols (best-effort)
-    const t0 = new ethers.Contract(token0, ERC20_ABI, provider);
-    const t1 = new ethers.Contract(token1, ERC20_ABI, provider);
-    let dec0 = null, dec1 = null, sym0 = null, sym1 = null;
-    try { dec0 = Number(await t0.decimals()); } catch (e) { dec0 = 18; }
-    try { dec1 = Number(await t1.decimals()); } catch (e) { dec1 = 18; }
-    try { sym0 = await t0.symbol(); } catch (e) { sym0 = null; }
-    try { sym1 = await t1.symbol(); } catch (e) { sym1 = null; }
-
-    // approximate price calculation:
-    // sqrtPriceX96 is a Q64.96 fixed point representing sqrt(token1/token0) * 2^96
-    // compute as Number((sqrt / 2^96)^2) * 10^(dec0 - dec1)
-    // do division first to avoid extremely large intermediate BigInt -> Number
-    let approxPrice = null;
-    try {
-      const sqrtBig = BigInt(sqrtPriceX96);
-      // convert to Number safely by dividing by 2^96 first (should bring magnitude near 1..100)
-      const sqrtAsNumber = Number(sqrtBig) / Math.pow(2, 96);
-      const priceRaw = Math.pow(sqrtAsNumber, 2);
-      // adjust for decimals (token1 per token0)
-      const decimalAdj = Math.pow(10, (dec0 ?? 18) - (dec1 ?? 18));
-      approxPrice = priceRaw * decimalAdj;
-      // guard for NaN / Infinity
-      if (!isFinite(approxPrice)) approxPrice = null;
-    } catch (e) {
-      approxPrice = null;
+    const r = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!r.ok) {
+      const body = await r.text().catch(()=>'<no body>');
+      return res.status(502).json({ error: 'Dexscreener fetch failed', status: r.status, body });
     }
+    const json = await r.json();
 
-    return res.json({
-      success: true,
-      pool: pool,
-      token0,
-      token1,
-      token0Decimals: dec0,
-      token1Decimals: dec1,
-      token0Symbol: sym0,
-      token1Symbol: sym1,
-      sqrtPriceX96,        // string
-      liquidity: liquidityStr, // string
-      tick: tick ?? null,
-      approxPriceUSD_or_quote: approxPrice // number or null (quote unit = token1 per token0)
-    });
+    // Normalize a small subset that the front-end will use:
+    // We'll return the full dexscreener response as `raw` and a `summary` mapping
+    const pairData = json?.pair || json?.pairs?.[0] || null;
+
+    const summary = {
+      pairAddress: pair,
+      priceUsd: pairData?.priceUsd ?? null,
+      fdv: pairData?.fdv ?? null,
+      liquidityUsd: pairData?.liquidity?.usd ?? pairData?.liquidityUsd ?? null,
+      // time-windowed stats (safe-read multiple possible key names)
+      txns: {
+        '5m': pairData?.txns?.m5 ?? pairData?.txns?.'5m' ?? null,
+        '15m': pairData?.txns?.m15 ?? null,
+        '30m': pairData?.txns?.m30 ?? null,
+        '1h': pairData?.txns?.h1 ?? pairData?.txns?.'1h' ?? null,
+        '6h': pairData?.txns?.h6 ?? null,
+        '24h': pairData?.txns?.h24 ?? pairData?.txns?.'24h' ?? null,
+      },
+      volume: {
+        '5m': pairData?.volume?.m5 ?? pairData?.volume?.'5m' ?? null,
+        '15m': pairData?.volume?.m15 ?? null,
+        '30m': pairData?.volume?.m30 ?? null,
+        '1h': pairData?.volume?.h1 ?? null,
+        '6h': pairData?.volume?.h6 ?? null,
+        '24h': pairData?.volume?.h24 ?? pairData?.volume?.'24h' ?? null,
+      },
+      // in case dexscreener exposes buys/sells split (some versions do)
+      buys: {
+        '5m': pairData?.buys?.m5 ?? null,
+        '1h': pairData?.buys?.h1 ?? null,
+        '6h': pairData?.buys?.h6 ?? null,
+        '24h': pairData?.buys?.h24 ?? null,
+      },
+      sells: {
+        '5m': pairData?.sells?.m5 ?? null,
+        '1h': pairData?.sells?.h1 ?? null,
+        '6h': pairData?.sells?.h6 ?? null,
+        '24h': pairData?.sells?.h24 ?? null,
+      }
+    };
+
+    return res.json({ success: true, raw: json, summary });
   } catch (err) {
-    console.error("Error fetching v3 pool:", err);
-    return res.status(500).json({ error: 'Failed to fetch Uniswap v3 pool data', details: String(err?.message || err) });
+    console.error("Dex proxy error:", err);
+    return res.status(500).json({ error: "Failed to fetch Dexscreener", details: String(err?.message || err) });
   }
 });
 

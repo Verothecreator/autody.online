@@ -609,16 +609,26 @@ const fmtUSDc = (n)=>fmtUSD(n,6);
 
 // ---- GT fetchers
 async function gtFetchPool(){
-  const url = `https://api.geckoterminal.com/api/v2/networks/${NETWORK_SLUG}/pools/${POOL_ADDRESS}`;
-  const res = await fetch(url,{ headers:{ "Accept":"application/json" }});
-  if (!res.ok) throw new Error(`GT pool HTTP ${res.status}`);
+  const url = `/api/gt/pool?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}`;
+  console.log("[GT] Requesting pool (proxy):", url);
+  const res = await fetch(url, { headers: { "Accept":"application/json" }});
+  if (!res.ok) throw new Error(`GT pool proxy HTTP ${res.status}`);
   return res.json();
 }
-async function gtFetchTrades(limit=300){
-  const url = `/api/trades?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}&limit=${limit}`;
-  const res = await fetch(url,{ headers:{ "Accept":"application/json" }});
-  if (!res.ok) throw new Error(`GT trades HTTP ${res.status}`);
-  return res.json();
+
+async function gtFetchTrades(limit = 500){
+  const url = `/api/gt/trades?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}&limit=${limit}`;
+  console.log("[GT trades] Requesting (proxy):", url);
+  try {
+    const res = await fetch(url, { headers: { "Accept":"application/json" }});
+    if (!res.ok) throw new Error(`GT trades proxy HTTP ${res.status}`);
+    const json = await res.json();
+    console.log("[GT trades] items:", (json?.data?.length ?? 0));
+    return json;
+  } catch (err) {
+    console.warn("[GT trades] fetch failed (proxy):", err?.message || err);
+    return null; // caller will fallback to pool attributes
+  }
 }
 
 // ---- aggregate trades into time windows
@@ -661,21 +671,24 @@ const elKPI = {
   mcap:  document.getElementById("kpi-mcap"),
 };
 
-let cachedTrades = null, tradesTs = 0;
-const TRADES_TTL = 50_000; // GT caches ~60s
+let cachedTradesProxy = null, tradesProxyTs = 0;
+const TRADES_TTL = 50_000;
 
 async function ensureTrades(){
   const now = Date.now();
-  if (!cachedTrades || (now - tradesTs) > TRADES_TTL){
-    try {
-      cachedTrades = await gtFetchTrades(300);
-      tradesTs = now;
-    } catch (e){
-      console.error("fetch trades failed:", e);
-      throw e;
-    }
+  if (cachedTradesProxy && (now - tradesProxyTs) <= TRADES_TTL) return cachedTradesProxy;
+
+  const tradesJson = await gtFetchTrades(500);
+  if (tradesJson) {
+    cachedTradesProxy = tradesJson;
+    tradesProxyTs = now;
+    return cachedTradesProxy;
   }
-  return cachedTrades;
+
+  // trades endpoint failed via proxy -> explicit null (so callers use fallback)
+  cachedTradesProxy = null;
+  tradesProxyTs = now;
+  return null;
 }
 
 // ---------- CoinGecko (polygon) + GeckoTerminal KPI updater ----------
@@ -802,15 +815,44 @@ document.addEventListener("DOMContentLoaded", () => {
 async function updateTimeframe(winKey){
   try {
     const trades = await ensureTrades();
-    const agg = aggregateTrades(trades, winKey);
 
-    if (elTF.txn)   elTF.txn.textContent   = agg.txn.toString();
-    if (elTF.vol)   elTF.vol.textContent   = fmtUSD(agg.volUSD, 0);
-    if (elTF.net)   elTF.net.textContent   = fmtUSD(agg.netBuyUSD, 0);
-    if (elTF.buys)  elTF.buys.textContent  = fmtUSD(agg.buysUSD, 0);
-    if (elTF.sells) elTF.sells.textContent = fmtUSD(agg.sellsUSD, 0);
+    if (trades) {
+      // we have trade-level data
+      const agg = aggregateTrades(trades, winKey);
+      if (elTF.txn)   elTF.txn.textContent   = agg.txn.toString();
+      if (elTF.vol)   elTF.vol.textContent   = fmtUSD(agg.volUSD, 0);
+      if (elTF.net)   elTF.net.textContent   = fmtUSD(agg.netBuyUSD, 0);
+      if (elTF.buys)  elTF.buys.textContent  = fmtUSD(agg.buysUSD, 0);
+      if (elTF.sells) elTF.sells.textContent = fmtUSD(agg.sellsUSD, 0);
+      return;
+    }
+
+    // FALLBACK: trades not available — compute from pool attributes if possible
+    console.warn("[updateTimeframe] trades unavailable; using pool attributes fallback.");
+    const pool = await gtFetchPool();
+    const attrs = pool?.data?.attributes || {};
+
+    // pool tx count (may be cumulative) and volume_usd may be present or null
+    const poolTxn = Number(attrs.transactions ?? 0) || 0;
+    let poolVol24 = Number(attrs.volume_usd ?? attrs.volume_in_usd ?? attrs.total_volume_usd ?? 0) || null;
+
+    // If poolVol24 is null, we still can try to compute 24h volume from the pool's own "volume_usd" fallback,
+    // but for v3 GT sometimes leaves it null — in that case show "—"
+    if (!poolVol24) poolVol24 = null;
+
+    if (elTF.txn)   elTF.txn.textContent   = poolTxn.toString();
+    if (elTF.vol)   elTF.vol.textContent   = poolVol24 ? fmtUSD(poolVol24, 0) : "—";
+    if (elTF.net)   elTF.net.textContent   = "—";
+    if (elTF.buys)  elTF.buys.textContent  = "—";
+    if (elTF.sells) elTF.sells.textContent = "—";
+
   } catch (e){
     console.error("TF update failed:", e);
+    if (elTF.txn)   elTF.txn.textContent   = "—";
+    if (elTF.vol)   elTF.vol.textContent   = "—";
+    if (elTF.net)   elTF.net.textContent   = "—";
+    if (elTF.buys)  elTF.buys.textContent  = "—";
+    if (elTF.sells) elTF.sells.textContent = "—";
   }
 }
 

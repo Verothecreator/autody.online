@@ -635,6 +635,36 @@ async function fetchDexPair() {
   }
 }
 
+// ---- GT fetchers
+/* ---------------------------
+   GT v3 proxy fetchers (via our server)
+--------------------------- */
+async function gtFetchPool(){
+  // prefer v3 proxy (if you have both, keep consistent)
+  const url = `/api/gtv3/pool?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}`;
+  console.log("[GT] Requesting pool (proxy):", url);
+  const res = await fetch(url, { headers: { "Accept":"application/json" }});
+  console.log("[GT] HTTP status:", res.status);
+  if (!res.ok) throw new Error(`GT pool proxy HTTP ${res.status}`);
+  const json = await res.json();
+  console.log("[GT] response keys:", Object.keys(json || {}));
+  return json;
+}
+
+async function gtFetchTrades(limit = 500){
+  const url = `/api/gtv3/trades?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}&limit=${limit}`;
+  console.log("[GT v3 trades] Requesting (proxy):", url);
+  try {
+    const res = await fetch(url, { headers: { "Accept":"application/json" }});
+    if (!res.ok) throw new Error(`GT v3 trades proxy HTTP ${res.status}`);
+    const json = await res.json();
+    console.log("[GT v3 trades] items:", (json?.data?.length ?? 0));
+    return json;
+  } catch (err) {
+    console.warn("[GT v3 trades] fetch failed (proxy):", err?.message || err);
+    return null; // caller will fallback to pool attributes
+  }
+}
 
 // ---- aggregate trades into time windows
 const WINDOWS_MIN = { "5m":5, "1h":60, "6h":360, "24h":1440 };
@@ -679,6 +709,25 @@ const elKPI = {
 let cachedTradesProxy = null, tradesProxyTs = 0;
 const TRADES_TTL = 50_000;
 
+async function ensureTrades(){
+  const now = Date.now();
+  if (cachedTradesProxy && (now - tradesProxyTs) <= TRADES_TTL) return cachedTradesProxy;
+
+  const tradesJson = await gtFetchTrades(500);
+  if (tradesJson) {
+    cachedTradesProxy = tradesJson;
+    tradesProxyTs = now;
+    return cachedTradesProxy;
+  }
+
+  // trades endpoint failed via proxy -> explicit null (so callers use fallback)
+  cachedTradesProxy = null;
+  tradesProxyTs = now;
+  return null;
+}
+
+// ---------- CoinGecko (polygon) + GeckoTerminal KPI updater ----------
+// ---------- CoinGecko (polygon) with detailed error logging ----------
 async function fetchFromCoinGecko() {
   const url = `https://api.coingecko.com/api/v3/coins/polygon-pos/contract/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
   console.log("[CG] Requesting CoinGecko:", url);
@@ -714,6 +763,132 @@ async function fetchGtPool() {
   } catch (err) {
     console.warn("[GT] fetch failed:", err?.message || err);
     throw err;
+  }
+}
+
+
+// ======= GT-First KPI updater (use GT attributes directly) =======
+async function updateKpis() {
+  try {
+    // immediate UI feedback
+    if (elKPI.vol24) elKPI.vol24.textContent = "Loading…";
+    if (elKPI.liq)   elKPI.liq.textContent   = "Loading…";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = "Loading…";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = "Loading…";
+
+    // 1) GT pool (fast, authoritative for reserves/FDV)
+    let poolJson = null;
+    try {
+      poolJson = await gtFetchPool();
+    } catch (e) {
+      console.warn("[updateKpis] GT pool fetch failed:", e?.message || e);
+      poolJson = null;
+    }
+    const attrs = poolJson?.data?.attributes || {};
+
+    // extract what GT provides (may be null for v3)
+    let reserveUsd = Number(attrs.reserve_in_usd ?? attrs.reserve0_in_usd ?? attrs.reserve_in_usd_total ?? 0) || null;
+    let vol24 = Number(attrs.volume_usd ?? attrs.volume_in_usd ?? attrs.total_volume_usd ?? 0) || null;
+    let fdv = Number(attrs.fdv_usd ?? attrs.fdv ?? 0) || null;
+    let mcap = Number(attrs.market_cap_usd ?? attrs.market_cap ?? 0) || null;
+
+    // Extract GT price-change percent if present
+    let priceChange24 = null;
+    const pcp = attrs.price_change_percentage;
+    if (pcp != null) {
+      if (typeof pcp === "object") priceChange24 = Number(pcp.h24 ?? pcp['24h'] ?? pcp.h24);
+      else priceChange24 = Number(pcp);
+      if (!isFinite(priceChange24)) priceChange24 = null;
+    }
+
+    // 2) If GT did not provide 24h volume (common for Uniswap v3), try Uniswap subgraph fallback
+    if (!vol24) {
+      console.log("[updateKpis] GT vol24 missing or null — trying Uniswap subgraph fallback...");
+      const uni = await fetchUniPool();
+      if (uni) {
+        // uni.volumeUSD is usually a string or number
+        const uniVol = Number(uni.volumeUSD ?? uni.volumeUsd ?? 0) || null;
+        const uniTVL = Number(uni.totalValueLockedUSD ?? uni.totalValueLockedUsd ?? 0) || null;
+        if (uniVol) vol24 = uniVol;
+        if (!reserveUsd && uniTVL) reserveUsd = uniTVL;
+        // try txCount if you want later
+        console.log("[updateKpis] uni fallback vol:", uniVol, "tvl:", uniTVL);
+      } else {
+        console.log("[updateKpis] uni fallback not available");
+      }
+    }
+
+    // 3) CoinGecko supplement (only if you still want FDV/mcap fallback)
+    // Keep the coinGecko call, but be tolerant to failures and log fully (fetchFromCoinGecko already logs)
+    let cg = null;
+    try {
+      cg = await fetchFromCoinGecko();
+    } catch (e) {
+      // coinGecko often 404s for new tokens; we already log full body in fetchFromCoinGecko
+      cg = null;
+    }
+    const md = cg?.market_data || {};
+    const cgVol24 = Number(md.total_volume?.usd) || null;
+    const cgMCap  = Number(md.market_cap?.usd) || null;
+    const cgFDV   = Number(md.fully_diluted_valuation?.usd) || null;
+
+    // choose final values — prefer GT/UNI, then CG as supplement
+    const finalVol24 = (vol24 && isFinite(vol24) && vol24 > 0) ? vol24 : (Number.isFinite(cgVol24) ? cgVol24 : null);
+    const finalLiq   = (reserveUsd && isFinite(reserveUsd) && reserveUsd > 0) ? reserveUsd : null;
+    const finalFDV   = Number.isFinite(fdv) && fdv > 0 ? fdv : (Number.isFinite(cgFDV) ? cgFDV : null);
+    const finalMCap  = Number.isFinite(mcap) && mcap > 0 ? mcap : (Number.isFinite(cgMCap) ? cgMCap : null);
+
+    console.log("[updateKpis] finalVol24:", finalVol24, "finalLiq:", finalLiq, "finalFDV:", finalFDV, "finalMCap:", finalMCap, "pcp24:", priceChange24);
+
+    // Render UI
+    if (elKPI.vol24) elKPI.vol24.textContent = finalVol24 ? fmtUSD(finalVol24, 0) : "—";
+    if (elKPI.liq)   elKPI.liq.textContent   = finalLiq   ? fmtUSD(finalLiq, 0)   : "—";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = finalFDV   ? fmtUSD(finalFDV, 0)   : "—";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = finalMCap  ? fmtUSD(finalMCap, 0)  : "—";
+
+    // update percent badge
+    const pctEl = document.getElementById("pct-h24");
+    if (pctEl) {
+      if (priceChange24 != null) {
+        const n = Number(priceChange24);
+        const sign = n > 0 ? "+" : (n < 0 ? "" : "");
+        pctEl.textContent = `${sign}${n.toFixed(2)}%`;
+        pctEl.classList.toggle("pct-pos", n > 0);
+        pctEl.classList.toggle("pct-neg", n < 0);
+      } else {
+        pctEl.textContent = "0%";
+        pctEl.classList.remove("pct-pos","pct-neg");
+      }
+    }
+
+  } catch (err) {
+    console.error("[updateKpis] fatal error:", err);
+    if (elKPI.vol24) elKPI.vol24.textContent = "—";
+    if (elKPI.liq)   elKPI.liq.textContent   = "—";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = "—";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
+  }
+}
+
+// ---------- Uniswap v3 subgraph fallback (server -> subgraph) ----------
+async function fetchUniPool() {
+  // server route: /api/uni/pool?pool=<POOL_ADDRESS>
+  const url = `/api/uni/pool?pool=${POOL_ADDRESS}`;
+  console.log("[UNI] Requesting Uniswap subgraph (proxy):", url);
+  try {
+    const res = await fetch(url, { headers: { "Accept": "application/json" }});
+    console.log("[UNI] HTTP status:", res.status);
+    if (!res.ok) {
+      const t = await res.text().catch(()=>"<no body>");
+      console.warn("[UNI] non-OK response:", res.status, t);
+      return null;
+    }
+    const json = await res.json();
+    console.log("[UNI] pool keys:", Object.keys(json || {}));
+    return json;
+  } catch (err) {
+    console.warn("[UNI] fetch failed:", err?.message || err);
+    return null;
   }
 }
 

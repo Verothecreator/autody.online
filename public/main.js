@@ -608,25 +608,28 @@ const fmtUSD  = (n, fd=0)=> (n==null||!isFinite(n)) ? "—"
 const fmtUSDc = (n)=>fmtUSD(n,6);
 
 // ---- GT fetchers
+/* ---------------------------
+   GT v3 proxy fetchers (via our server)
+--------------------------- */
 async function gtFetchPool(){
-  const url = `/api/gt/pool?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}`;
-  console.log("[GT] Requesting pool (proxy):", url);
+  const url = `/api/gtv3/pool?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}`;
+  console.log("[GT v3] Requesting pool (proxy):", url);
   const res = await fetch(url, { headers: { "Accept":"application/json" }});
-  if (!res.ok) throw new Error(`GT pool proxy HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`GT v3 pool proxy HTTP ${res.status}`);
   return res.json();
 }
 
 async function gtFetchTrades(limit = 500){
-  const url = `/api/gt/trades?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}&limit=${limit}`;
-  console.log("[GT trades] Requesting (proxy):", url);
+  const url = `/api/gtv3/trades?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}&limit=${limit}`;
+  console.log("[GT v3 trades] Requesting (proxy):", url);
   try {
     const res = await fetch(url, { headers: { "Accept":"application/json" }});
-    if (!res.ok) throw new Error(`GT trades proxy HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`GT v3 trades proxy HTTP ${res.status}`);
     const json = await res.json();
-    console.log("[GT trades] items:", (json?.data?.length ?? 0));
+    console.log("[GT v3 trades] items:", (json?.data?.length ?? 0));
     return json;
   } catch (err) {
-    console.warn("[GT trades] fetch failed (proxy):", err?.message || err);
+    console.warn("[GT v3 trades] fetch failed (proxy):", err?.message || err);
     return null; // caller will fallback to pool attributes
   }
 }

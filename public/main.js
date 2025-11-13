@@ -635,20 +635,6 @@ async function fetchDexPair() {
   }
 }
 
-async function gtFetchTrades(limit = 500){
-  const url = `/api/gtv3/trades?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}&limit=${limit}`;
-  console.log("[GT v3 trades] Requesting (proxy):", url);
-  try {
-    const res = await fetch(url, { headers: { "Accept":"application/json" }});
-    if (!res.ok) throw new Error(`GT v3 trades proxy HTTP ${res.status}`);
-    const json = await res.json();
-    console.log("[GT v3 trades] items:", (json?.data?.length ?? 0));
-    return json;
-  } catch (err) {
-    console.warn("[GT v3 trades] fetch failed (proxy):", err?.message || err);
-    return null; // caller will fallback to pool attributes
-  }
-}
 
 // ---- aggregate trades into time windows
 const WINDOWS_MIN = { "5m":5, "1h":60, "6h":360, "24h":1440 };

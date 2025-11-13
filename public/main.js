@@ -679,32 +679,6 @@ const elKPI = {
 let cachedTradesProxy = null, tradesProxyTs = 0;
 const TRADES_TTL = 50_000;
 
-
-
-// ---------- CoinGecko (polygon) + GeckoTerminal KPI updater ----------
-// ---------- CoinGecko (polygon) with detailed error logging ----------
-async function fetchFromCoinGecko() {
-  const url = `https://api.coingecko.com/api/v3/coins/polygon-pos/contract/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
-  console.log("[CG] Requesting CoinGecko:", url);
-  try {
-    const res = await fetch(url, { headers: { "Accept": "application/json" }});
-    console.log("[CG] HTTP status:", res.status);
-    if (!res.ok) {
-      // try to capture body for debugging (CoinGecko sometimes returns HTML or a short JSON)
-      let bodyText = "";
-      try { bodyText = await res.text(); } catch (e) { bodyText = "<failed to read body>"; }
-      console.warn(`[CG] non-OK response: ${res.status} - body:`, bodyText);
-      throw new Error(`CG HTTP ${res.status}`);
-    }
-    const json = await res.json();
-    console.log("[CG] response keys:", Object.keys(json || {}));
-    return json;
-  } catch (err) {
-    console.warn("[CG] fetch failed:", err?.message || err);
-    throw err;
-  }
-}
-
 async function fetchGtPool() {
   const url = `https://api.geckoterminal.com/api/v2/networks/${NETWORK_SLUG}/pools/${POOL_ADDRESS}`;
   console.log("[GT] Requesting pool:", url);

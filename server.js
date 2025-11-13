@@ -47,6 +47,54 @@ app.get('/api/gtv3/trades', async (req, res) => {
   }
 });
 
+// ---------------------- Uniswap V3 Subgraph fallback ----------------------
+app.get('/api/uni/pool', async (req, res) => {
+  const network = req.query.network || "polygon";
+  const pool = req.query.pool;
+  if (!pool) return res.status(400).json({ error: "Missing pool parameter" });
+
+  // Uniswap V3 Polygon subgraph (maintained by Messari)
+  const subgraphUrl = "https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-v3-polygon";
+
+  // GraphQL query: last 24h volume + tx count + token prices
+  const query = {
+    query: `
+      {
+        pool(id: "${pool.toLowerCase()}") {
+          id
+          token0 { symbol decimals }
+          token1 { symbol decimals }
+          volumeUSD
+          totalValueLockedUSD
+          txCount
+          feesUSD
+          totalValueLockedToken0
+          totalValueLockedToken1
+        }
+      }
+    `
+  };
+
+  try {
+    const response = await fetch(subgraphUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(query)
+    });
+    const json = await response.json();
+
+    if (json?.data?.pool) {
+      res.set('Cache-Control', 'public, max-age=15');
+      res.json(json.data.pool);
+    } else {
+      res.status(404).json({ error: "Pool not found in subgraph" });
+    }
+  } catch (err) {
+    console.error("Uniswap v3 subgraph error:", err.message);
+    res.status(502).json({ error: "Failed to fetch from Uniswap v3 subgraph" });
+  }
+});
+
 // SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/index.html'));

@@ -635,22 +635,6 @@ async function fetchDexPair() {
   }
 }
 
-// ---- GT fetchers
-/* ---------------------------
-   GT v3 proxy fetchers (via our server)
---------------------------- */
-async function gtFetchPool(){
-  // prefer v3 proxy (if you have both, keep consistent)
-  const url = `/api/gtv3/pool?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}`;
-  console.log("[GT] Requesting pool (proxy):", url);
-  const res = await fetch(url, { headers: { "Accept":"application/json" }});
-  console.log("[GT] HTTP status:", res.status);
-  if (!res.ok) throw new Error(`GT pool proxy HTTP ${res.status}`);
-  const json = await res.json();
-  console.log("[GT] response keys:", Object.keys(json || {}));
-  return json;
-}
-
 async function gtFetchTrades(limit = 500){
   const url = `/api/gtv3/trades?network=${NETWORK_SLUG}&pool=${POOL_ADDRESS}&limit=${limit}`;
   console.log("[GT v3 trades] Requesting (proxy):", url);

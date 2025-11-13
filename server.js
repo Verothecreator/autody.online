@@ -36,20 +36,20 @@ app.get('/api/dex/pair', async (req, res) => {
       liquidityUsd: pairData?.liquidity?.usd ?? pairData?.liquidityUsd ?? null,
       // time-windowed stats (safe-read multiple possible key names)
       txns: {
-        '5m': pairData?.txns?.m5 ?? pairData?.txns?.'5m' ?? null,
+        '5m': pairData?.txns?.m5 ?? pairData?.txns?.['5m'] ?? null,
         '15m': pairData?.txns?.m15 ?? null,
         '30m': pairData?.txns?.m30 ?? null,
-        '1h': pairData?.txns?.h1 ?? pairData?.txns?.'1h' ?? null,
+        '1h': pairData?.txns?.h1 ?? pairData?.txns?.['1h'] ?? null,
         '6h': pairData?.txns?.h6 ?? null,
-        '24h': pairData?.txns?.h24 ?? pairData?.txns?.'24h' ?? null,
+        '24h': pairData?.txns?.h24 ?? pairData?.txns?.['24h'] ?? null,
       },
       volume: {
-        '5m': pairData?.volume?.m5 ?? pairData?.volume?.'5m' ?? null,
+        '5m': pairData?.volume?.m5 ?? pairData?.volume?.['5m'] ?? null,
         '15m': pairData?.volume?.m15 ?? null,
         '30m': pairData?.volume?.m30 ?? null,
         '1h': pairData?.volume?.h1 ?? null,
         '6h': pairData?.volume?.h6 ?? null,
-        '24h': pairData?.volume?.h24 ?? pairData?.volume?.'24h' ?? null,
+        '24h': pairData?.volume?.h24 ?? pairData?.volume?.['24h'] ?? null,
       },
       // in case dexscreener exposes buys/sells split (some versions do)
       buys: {

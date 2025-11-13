@@ -679,22 +679,7 @@ const elKPI = {
 let cachedTradesProxy = null, tradesProxyTs = 0;
 const TRADES_TTL = 50_000;
 
-async function ensureTrades(){
-  const now = Date.now();
-  if (cachedTradesProxy && (now - tradesProxyTs) <= TRADES_TTL) return cachedTradesProxy;
 
-  const tradesJson = await gtFetchTrades(500);
-  if (tradesJson) {
-    cachedTradesProxy = tradesJson;
-    tradesProxyTs = now;
-    return cachedTradesProxy;
-  }
-
-  // trades endpoint failed via proxy -> explicit null (so callers use fallback)
-  cachedTradesProxy = null;
-  tradesProxyTs = now;
-  return null;
-}
 
 // ---------- CoinGecko (polygon) + GeckoTerminal KPI updater ----------
 // ---------- CoinGecko (polygon) with detailed error logging ----------

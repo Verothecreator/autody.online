@@ -825,28 +825,6 @@ async function updateKpis() {
   }
 }
 
-// ---------- Uniswap v3 subgraph fallback (server -> subgraph) ----------
-async function fetchUniPool() {
-  // server route: /api/uni/pool?pool=<POOL_ADDRESS>
-  const url = `/api/uni/pool?pool=${POOL_ADDRESS}`;
-  console.log("[UNI] Requesting Uniswap subgraph (proxy):", url);
-  try {
-    const res = await fetch(url, { headers: { "Accept": "application/json" }});
-    console.log("[UNI] HTTP status:", res.status);
-    if (!res.ok) {
-      const t = await res.text().catch(()=>"<no body>");
-      console.warn("[UNI] non-OK response:", res.status, t);
-      return null;
-    }
-    const json = await res.json();
-    console.log("[UNI] pool keys:", Object.keys(json || {}));
-    return json;
-  } catch (err) {
-    console.warn("[UNI] fetch failed:", err?.message || err);
-    return null;
-  }
-}
-
 
 // ensure regular refresh (keep your existing DOMContentLoaded wiring)
 

@@ -95,6 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+/* ===== Buy popup, wallet connect & Transak (unchanged) ===== */
 document.addEventListener("DOMContentLoaded", () => {
   const openBtn  = document.getElementById("open-buy-card-btn");
   const popup    = document.getElementById("buy-card-popup");
@@ -192,7 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ---------------------------
-   Wallet selection helpers
+   Wallet helpers, WalletConnect, Transak (unchanged)
 --------------------------- */
 function findInjectedFor(type, discoveredProviders) {
   const NAME_MAP = {
@@ -354,14 +355,14 @@ function launchTransak() {
 }
 
 /* ---------------------------
-   Live USD → AUTODY converter
+   Live USD → AUTODY converter (unchanged)
 --------------------------- */
 const usdInput   = document.getElementById("usdAmount");
 const tokenInput = document.getElementById("tokenAmount");
 
 const AUTODY_ADDRESS = "0xa2746a48211cd3cb0fc6356deb10d79feb792c57".toLowerCase(); // new Polygon contract (lowercased)
-const NETWORK_SLUG   = "polygon_pos";   // GeckoTerminal network slug for Polygon (used in GT API endpoints)
-const POOL_ADDRESS   = "0x30dA748C76D1c87b2893035b60fDc50a31439d8D"; // new GeckoTerminal pool pair (case preserved)
+const NETWORK_SLUG   = "polygon_pos";   // legacy slug (kept for compatibility)
+const POOL_ADDRESS   = "0x30dA748C76D1c87b2893035b60fDc50a31439d8D"; // pair identifier used by Dexscreener proxy
 
 const POLYGON_RPC = "https://polygon-rpc.com"; // read-only JSON-RPC endpoint
 
@@ -429,7 +430,6 @@ async function fetchOnchainPoolPrice(poolAddress, targetTokenAddress) {
       return { price: Number(priceInQuote), unit: quoteSymbol };
     } catch (v3Err) {
       // not a v3 pool or v3 read failed; try v2 style
-      // console.warn("v3 attempt failed:", v3Err);
       const poolV2 = new ethers.Contract(poolAddress, ABI_V2, provider);
       token0 = (await poolV2.token0()).toLowerCase();
       token1 = (await poolV2.token1()).toLowerCase();
@@ -485,7 +485,7 @@ async function convertQuoteToUSD(amount, unitSymbol) {
   }
 }
 
-
+/* ===== Price helpers + caching (kept — used by buy widget) ===== */
 let cachedPriceUSD = null;
 let lastPriceTs    = 0;
 const PRICE_TTL_MS = 10_000;
@@ -560,7 +560,7 @@ async function getAutodyPriceUSD() {
   }
 }
 
-
+/* ===== debounce helper and USD->token live update (unchanged) ===== */
 let debounceTimer = null;
 function debounce(fn, wait = 250) {
   clearTimeout(debounceTimer);
@@ -600,18 +600,20 @@ async function warmPriceCache() {
   await getAutodyPriceUSD();
 }
 
-// ======== AUTODY Pool Stats (v2) ========
-
-// ---- format helpers
+/* -----------------------
+   Small format helpers
+----------------------- */
 const fmtUSD  = (n, fd=0)=> (n==null||!isFinite(n)) ? "—"
   : new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:fd}).format(n);
 const fmtUSDc = (n)=>fmtUSD(n,6);
 
-// ----------------- Dexscreener client (frontend) -----------------
+/* -----------------------
+   Dexscreener integration
+   (proxy endpoint: /api/dex/pair?pair=<POOL_ADDRESS>)
+----------------------- */
 const DEX_CACHE_TTL = 30_000; // ms
 let cachedDex = null, cachedDexTs = 0;
 
-// call our server proxy /api/dex/pair?pair=<POOL_ADDRESS>
 async function fetchDexPair() {
   const now = Date.now();
   if (cachedDex && (now - cachedDexTs) < DEX_CACHE_TTL) return cachedDex;
@@ -630,39 +632,13 @@ async function fetchDexPair() {
     return cachedDex;
   } catch (err) {
     console.warn("[Dex] fetch failed:", err?.message || err);
-    // don't throw, let callers handle null
     return null;
   }
 }
 
-
-
-// ---- aggregate trades into time windows
-const WINDOWS_MIN = { "5m":5, "1h":60, "6h":360, "24h":1440 };
-function cutoffForWindow(winKey){ return Date.now() - (WINDOWS_MIN[winKey]||5)*60*1000; }
-
-function aggregateTrades(tradesJson, winKey){
-  const cutoff = cutoffForWindow(winKey);
-  const list = tradesJson?.data || [];
-  let txn=0, vol=0, buys=0, sells=0;
-
-  for (const t of list){
-    const a   = t?.attributes || {};
-    const ts  = a.block_timestamp ? new Date(a.block_timestamp).getTime() : 0;
-    if (ts < cutoff) continue;
-
-    const side = String(a.trade_type||"").toLowerCase();       // "buy" or "sell"
-    const usd  = Number(a.amount_usd ?? a.total_value_usd ?? 0);
-    if (!isFinite(usd) || usd <= 0) continue;
-
-    txn += 1; vol += usd;
-    if (side === "buy") buys += usd;
-    else if (side === "sell") sells += usd;
-  }
-  return { txn, volUSD: vol, buysUSD: buys, sellsUSD: sells, netBuyUSD: buys - sells };
-}
-
-// ---- DOM refs
+/* -----------------------
+   Elements references for the TF and KPI blocks
+----------------------- */
 const elTF = {
   txn:   document.getElementById("tf-txn"),
   vol:   document.getElementById("tf-vol"),
@@ -677,61 +653,75 @@ const elKPI = {
   mcap:  document.getElementById("kpi-mcap"),
 };
 
-let cachedTradesProxy = null, tradesProxyTs = 0;
-const TRADES_TTL = 50_000;
-
-
-// ---------- CoinGecko (polygon) + GeckoTerminal KPI updater ----------
-// ---------- CoinGecko (polygon) with detailed error logging ----------
-async function fetchFromCoinGecko() {
-  const url = `https://api.coingecko.com/api/v3/coins/polygon-pos/contract/${AUTODY_ADDRESS}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
-  console.log("[CG] Requesting CoinGecko:", url);
+/* -----------------------
+   TIMEFRAME & KPI UPDATES (DEXSCEENER)
+   - updateKpis() reads dex.summary/raw for vol, liquidity, fdv, price
+   - updateTimeframe(winKey) reads per-window (5m,15m,30m,1h,6h,24h)
+----------------------- */
+async function updateKpis() {
   try {
-    const res = await fetch(url, { headers: { "Accept": "application/json" }});
-    console.log("[CG] HTTP status:", res.status);
-    if (!res.ok) {
-      // try to capture body for debugging (CoinGecko sometimes returns HTML or a short JSON)
-      let bodyText = "";
-      try { bodyText = await res.text(); } catch (e) { bodyText = "<failed to read body>"; }
-      console.warn(`[CG] non-OK response: ${res.status} - body:`, bodyText);
-      throw new Error(`CG HTTP ${res.status}`);
+    if (elKPI.vol24) elKPI.vol24.textContent = "Loading…";
+    if (elKPI.liq)   elKPI.liq.textContent   = "Loading…";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = "Loading…";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = "Loading…";
+
+    const dex = await fetchDexPair();
+    if (!dex) {
+      // fallback: keep using existing price fetch helpers as last resort
+      if (elKPI.vol24) elKPI.vol24.textContent = "—";
+      if (elKPI.liq)   elKPI.liq.textContent   = "—";
+      if (elKPI.fdv)   elKPI.fdv.textContent   = "—";
+      if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
+      return;
     }
-    const json = await res.json();
-    console.log("[CG] response keys:", Object.keys(json || {}));
-    return json;
+
+    const s = dex.summary || {};
+    const raw = dex.raw?.pair || dex.raw?.pairs?.[0] || {};
+
+    // prefer summary fields, fall back to raw if needed
+    const finalVol24 = s.volume?.['24h'] ?? s.volume?.['24h'] ?? raw?.volume?.h24 ?? raw?.volume?.['24h'] ?? null;
+    const finalLiq   = s.liquidityUsd ?? raw?.liquidity?.usd ?? raw?.liquidityUsd ?? null;
+    const finalFDV   = s.fdv ?? raw?.fdv ?? raw?.pair?.fdv ?? null;
+    const finalPrice = raw?.priceUsd ?? s.priceUsd ?? null;
+
+    if (elKPI.vol24) elKPI.vol24.textContent = finalVol24 ? fmtUSD(finalVol24,0) : "—";
+    if (elKPI.liq)   elKPI.liq.textContent   = finalLiq   ? fmtUSD(finalLiq,0) : "—";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = finalFDV   ? fmtUSD(finalFDV,0) : "—";
+    // market cap not reliable from Dexscreener — leave placeholder unless you compute it from FDV or CG
+    if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
+
+    // update price element if available
+    const priceEl = document.getElementById("kpi-price");
+    if (priceEl) priceEl.textContent = finalPrice ? Number(finalPrice).toFixed(6) : "—";
+
+    // price-change percent (try raw first, then summary)
+    const pctEl = document.getElementById("pct-h24");
+    const pcp = raw?.priceChange?.h24 ?? raw?.priceChangePercent ?? raw?.price_change_percent ?? null;
+    if (pctEl) {
+      if (pcp != null && isFinite(Number(pcp))) {
+        const n = Number(pcp);
+        const sign = n > 0 ? "+" : (n < 0 ? "" : "");
+        pctEl.textContent = `${sign}${n.toFixed(2)}%`;
+        pctEl.classList.toggle("pct-pos", n > 0);
+        pctEl.classList.toggle("pct-neg", n < 0);
+      } else {
+        pctEl.textContent = "0%";
+        pctEl.classList.remove("pct-pos","pct-neg");
+      }
+    }
+
   } catch (err) {
-    console.warn("[CG] fetch failed:", err?.message || err);
-    throw err;
+    console.error("[updateKpis] fatal error:", err);
+    if (elKPI.vol24) elKPI.vol24.textContent = "—";
+    if (elKPI.liq)   elKPI.liq.textContent   = "—";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = "—";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
   }
 }
 
-async function fetchGtPool() {
-  const url = `https://api.geckoterminal.com/api/v2/networks/${NETWORK_SLUG}/pools/${POOL_ADDRESS}`;
-  console.log("[GT] Requesting pool:", url);
-  try {
-    const res = await fetch(url, { headers: { "Accept": "application/json" } });
-    console.log("[GT] HTTP status:", res.status);
-    if (!res.ok) throw new Error(`GT HTTP ${res.status}`);
-    const json = await res.json();
-    console.log("[GT] response keys:", Object.keys(json || {}));
-    return json;
-  } catch (err) {
-    console.warn("[GT] fetch failed:", err?.message || err);
-    throw err;
-  }
-}
-
-// ensure regular refresh (keep your existing DOMContentLoaded wiring)
-
-// Kick off initial update + periodic refresh every 30s (GT caches frequently)
-document.addEventListener("DOMContentLoaded", () => {
-  updateKpis();
-  setInterval(updateKpis, 30_000);
-});
-
+/* updateTimeframe uses Dexscreener summary/raw for windowed stats */
 async function updateTimeframe(winKey){
   try {
-    // Map incoming keys to dexscreener naming
     const map = {
       "m5": ['5m','m5'],
       "m15": ['15m','m15'],
@@ -752,19 +742,18 @@ async function updateTimeframe(winKey){
       if (elTF.sells) elTF.sells.textContent = "—";
       return;
     }
+
     const s = dex.summary || {};
     const raw = dex.raw?.pair || dex.raw?.pairs?.[0] || {};
 
-    // prefer summary.volume and summary.txns if present
     let vol = null, txn = null, buys = null, sells = null;
     for (const k of candidates) {
-      vol = vol ?? (s.volume && s.volume[k]) ?? (raw.volume && (raw.volume[k] ?? raw.volume?.[k]));
-      txn = txn ?? (s.txns && s.txns[k]) ?? (raw.txns && (raw.txns[k] ?? raw.txns?.[k]));
-      buys = buys ?? (s.buys && s.buys[k]) ?? (raw.txns && raw.txns[k] && raw.txns[k].buys) ?? null;
+      vol   = vol   ?? (s.volume && s.volume[k]) ?? (raw.volume && (raw.volume[k] ?? raw.volume?.[k]));
+      txn   = txn   ?? (s.txns && s.txns[k]) ?? (raw.txns && (raw.txns[k] ?? raw.txns?.[k]));
+      buys  = buys  ?? (s.buys && s.buys[k]) ?? (raw.txns && raw.txns[k] && raw.txns[k].buys) ?? null;
       sells = sells ?? (s.sells && s.sells[k]) ?? (raw.txns && raw.txns[k] && raw.txns[k].sells) ?? null;
     }
 
-    // normalize values: dexscreener sometimes returns numbers or objects; try to extract USD numeric values
     const getNumber = v => {
       if (v == null) return null;
       if (typeof v === 'number') return v;
@@ -773,16 +762,19 @@ async function updateTimeframe(winKey){
         return isFinite(n) ? n : null;
       }
       if (typeof v === 'object') {
-        // maybe { buys: N, sells: N } or { usd: N}
         if (v.usd != null) return Number(v.usd);
         if (v.volume_usd != null) return Number(v.volume_usd);
+        // sometimes dexscreener returns { buys: N, sells: N } where buys/sells are numbers
+        if (v.buys != null || v.sells != null) {
+          return null; // leave split handling to buys/sells extraction
+        }
       }
       return null;
     };
 
     const volNum = getNumber(vol);
-    const buysNum = getNumber(buys);
-    const sellsNum = getNumber(sells);
+    const buysNum = getNumber(buys) ?? (typeof buys === 'number' ? buys : null);
+    const sellsNum = getNumber(sells) ?? (typeof sells === 'number' ? sells : null);
     const txnNum = (typeof txn === 'number') ? txn : (typeof txn === 'string' && /^\d+$/.test(txn) ? Number(txn) : null);
 
     if (elTF.txn)   elTF.txn.textContent   = txnNum != null ? txnNum.toString() : "—";
@@ -801,10 +793,12 @@ async function updateTimeframe(winKey){
   }
 }
 
-// ---- Tabs (default = 24H)
+/* -----------------------
+   Tabs wiring (keeps original behavior, but now uses Dexscreener functions)
+----------------------- */
 function wireTabs(){
   const tabs = document.querySelectorAll("#gt-tabs .gt-tab");
-  let current = "24h"; // default requested
+  let current = "h24"; // default requested (use h24 key matching updateTimeframe mapping)
 
   const setActive = (key)=>{
     tabs.forEach(b=>b.classList.toggle("active", b.dataset.win===key));
@@ -824,16 +818,16 @@ function wireTabs(){
   updateTimeframe(current);
   updateKpis();
 
-  // refresh every minute (GT cache window)
+  // refresh every minute
   setInterval(()=>updateTimeframe(current), 60_000);
   setInterval(updateKpis, 60_000);
 }
 
 document.addEventListener("DOMContentLoaded", wireTabs);
 
-// ====== Percentages under tabs + 15m/30m menu + dynamic labels ======
-
-// Map of our windows to minutes for trade aggregation, and to GT price-change keys.
+/* -----------------------
+   Enhanced tabs/menu (15m/30m in menu) — uses updateTimeframe()
+----------------------- */
 const WIN_DEFS = {
   m5:  { mins: 5,   pctKey: "m5",  label: "5M"  },
   m15: { mins: 15,  pctKey: "m15", label: "15m" },
@@ -843,12 +837,20 @@ const WIN_DEFS = {
   h24: { mins: 1440,pctKey: "h24", label: "24H" },
 };
 
-// Update the % badges under each tab from GT pool attributes.price_change_percentage
 async function updateTabPercents(){
   try {
-    const pool = await gtFetchPool();
-    const a = pool?.data?.attributes || {};
-    const pcp = a?.price_change_percentage || {};
+    const dex = await fetchDexPair();
+    const raw = dex?.raw?.pair || dex?.raw?.pairs?.[0] || null;
+    // Dexscreener may include price change keys or percent values in raw; try to read them
+    const pcp = raw?.priceChange || raw?.price_change || raw?.priceChangePercent || raw?.price_change_percent || {};
+    const pick = (obj, key) => {
+      if (!obj) return null;
+      if (typeof obj === 'object') {
+        return obj[key] ?? obj[key.toLowerCase()] ?? null;
+      }
+      return null;
+    };
+
     const setPct = (id, val) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -859,12 +861,13 @@ async function updateTabPercents(){
       el.classList.toggle("pct-pos", n > 0);
       el.classList.toggle("pct-neg", n < 0);
     };
-    setPct("pct-m5",  pcp.m5);
-    setPct("pct-m15", pcp.m15);
-    setPct("pct-m30", pcp.m30);
-    setPct("pct-h1",  pcp.h1);
-    setPct("pct-h6",  pcp.h6);
-    setPct("pct-h24", pcp.h24);
+
+    setPct("pct-m5",  pick(pcp,'m5')  ?? pick(raw,'m5'));
+    setPct("pct-m15", pick(pcp,'m15') ?? pick(raw,'m15'));
+    setPct("pct-m30", pick(pcp,'m30') ?? pick(raw,'m30'));
+    setPct("pct-h1",  pick(pcp,'h1')  ?? pick(raw,'h1'));
+    setPct("pct-h6",  pick(pcp,'h6')  ?? pick(raw,'h6'));
+    setPct("pct-h24", pick(pcp,'h24') ?? pick(raw,'h24') ?? pick(raw,'24h'));
   } catch (e){
     console.warn("updateTabPercents failed:", e);
   }
@@ -880,32 +883,7 @@ function setWindowLabels(key){
   if (lblVol) lblVol.textContent = `${def.label} Vol`;
 }
 
-// Adjust existing aggregator to accept custom window mins
-function cutoffForCustom(mins){
-  return Date.now() - mins*60*1000;
-}
-function aggregateTradesFor(tradesJson, mins){
-  const cutoff = cutoffForCustom(mins);
-  const list = tradesJson?.data || [];
-  let txn=0, vol=0, buys=0, sells=0;
-
-  for (const t of list){
-    const a   = t?.attributes || {};
-    const ts  = a.block_timestamp ? new Date(a.block_timestamp).getTime() : 0;
-    if (ts < cutoff) continue;
-
-    const side = String(a.trade_type||"").toLowerCase();       // "buy" or "sell"
-    const usd  = Number(a.amount_usd ?? a.total_value_usd ?? 0);
-    if (!isFinite(usd) || usd <= 0) continue;
-
-    txn += 1; vol += usd;
-    if (side === "buy") buys += usd;
-    else if (side === "sell") sells += usd;
-  }
-  return { txn, volUSD:vol, buysUSD:buys, sellsUSD:sells, netBuyUSD:buys - sells };
-}
-
-// Wire the tabs + more menu; default = 24H
+// Wire the tabs + menu
 function wireEnhancedTabs(){
   const tabsRow   = document.getElementById("gt-tabs");
   if (!tabsRow) return;
@@ -936,15 +914,9 @@ function wireEnhancedTabs(){
     const def = WIN_DEFS[key] || WIN_DEFS.h24;
     setActive(key);
     setWindowLabels(key);
-    // Trades
+    // Use Dexscreener-based timeframe rendering
     try {
-      const trades = await ensureTrades(); // you already have ensureTrades()
-      const agg = aggregateTradesFor(trades, def.mins);
-      document.getElementById("tf-txn").textContent   = agg.txn.toString();
-      document.getElementById("tf-vol").textContent   = fmtUSD(agg.volUSD, 0);
-      document.getElementById("tf-net").textContent   = fmtUSD(agg.netBuyUSD, 0);
-      document.getElementById("tf-buys").textContent  = fmtUSD(agg.buysUSD, 0);
-      document.getElementById("tf-sells").textContent = fmtUSD(agg.sellsUSD, 0);
+      await updateTimeframe(key);
     } catch (e){
       console.warn("trade agg failed:", e);
     }
@@ -971,5 +943,5 @@ function wireEnhancedTabs(){
   setInterval(updateTabPercents, 60_000);
 }
 
-// boot
+// boot enhanced tabs
 document.addEventListener("DOMContentLoaded", wireEnhancedTabs);

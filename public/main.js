@@ -607,6 +607,34 @@ const fmtUSD  = (n, fd=0)=> (n==null||!isFinite(n)) ? "—"
   : new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:fd}).format(n);
 const fmtUSDc = (n)=>fmtUSD(n,6);
 
+// ----------------- Dexscreener client (frontend) -----------------
+const DEX_CACHE_TTL = 30_000; // ms
+let cachedDex = null, cachedDexTs = 0;
+
+// call our server proxy /api/dex/pair?pair=<POOL_ADDRESS>
+async function fetchDexPair() {
+  const now = Date.now();
+  if (cachedDex && (now - cachedDexTs) < DEX_CACHE_TTL) return cachedDex;
+
+  const url = `/api/dex/pair?pair=${encodeURIComponent(POOL_ADDRESS)}`;
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' }});
+    if (!res.ok) {
+      const text = await res.text().catch(()=>"<no body>");
+      throw new Error(`Dex proxy HTTP ${res.status} : ${text}`);
+    }
+    const json = await res.json();
+    if (!json || !json.success) throw new Error("Invalid dex proxy response");
+    cachedDex = json;
+    cachedDexTs = Date.now();
+    return cachedDex;
+  } catch (err) {
+    console.warn("[Dex] fetch failed:", err?.message || err);
+    // don't throw, let callers handle null
+    return null;
+  }
+}
+
 // ---- GT fetchers
 /* ---------------------------
    GT v3 proxy fetchers (via our server)
@@ -875,48 +903,68 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function updateTimeframe(winKey){
   try {
-    const trades = await ensureTrades();
+    // Map incoming keys to dexscreener naming
+    const map = {
+      "m5": ['5m','m5'],
+      "m15": ['15m','m15'],
+      "m30": ['30m','m30'],
+      "h1": ['1h','h1'],
+      "h6": ['6h','h6'],
+      "h24": ['24h','h24']
+    };
+    const candidates = map[winKey] || map['h24'];
 
-    if (trades && (trades?.data?.length ?? 0) > 0) {
-      // normal path: trade-level data available
-      const agg = aggregateTrades(trades, winKey);
-      if (elTF.txn)   elTF.txn.textContent   = agg.txn.toString();
-      if (elTF.vol)   elTF.vol.textContent   = fmtUSD(agg.volUSD, 0);
-      if (elTF.net)   elTF.net.textContent   = fmtUSD(agg.netBuyUSD, 0);
-      if (elTF.buys)  elTF.buys.textContent  = fmtUSD(agg.buysUSD, 0);
-      if (elTF.sells) elTF.sells.textContent = fmtUSD(agg.sellsUSD, 0);
-      return;
-    }
-
-    // FALLBACK: trades missing or empty — try Uniswap subgraph for volume/tx
-    console.warn("[updateTimeframe] trades unavailable or empty; trying Uniswap subgraph fallback.");
-    const uni = await fetchUniPool();
-    if (uni) {
-      const poolTxn = Number(uni.txCount ?? uni.txcount ?? 0) || 0;
-      const poolVol24 = Number(uni.volumeUSD ?? uni.volumeUsd ?? 0) || null;
-      if (elTF.txn) elTF.txn.textContent = poolTxn.toString();
-      if (elTF.vol) elTF.vol.textContent = poolVol24 ? fmtUSD(poolVol24, 0) : "—";
-      if (elTF.net) elTF.net.textContent = "—";
-      if (elTF.buys) elTF.buys.textContent = "—";
+    const dex = await fetchDexPair();
+    if (!dex) {
+      // no dex data -> leave dashes
+      if (elTF.txn)   elTF.txn.textContent   = "—";
+      if (elTF.vol)   elTF.vol.textContent   = "—";
+      if (elTF.net)   elTF.net.textContent   = "—";
+      if (elTF.buys)  elTF.buys.textContent  = "—";
       if (elTF.sells) elTF.sells.textContent = "—";
       return;
     }
+    const s = dex.summary || {};
+    const raw = dex.raw?.pair || dex.raw?.pairs?.[0] || {};
 
-    // Last-resort: use GT pool attributes (may be null for v3)
-    console.warn("[updateTimeframe] uni fallback failed; using GT pool attributes fallback.");
-    const pool = await gtFetchPool();
-    const attrs = pool?.data?.attributes || {};
-    const poolTxn = Number(attrs.transactions ?? 0) || 0;
-    let poolVol24 = Number(attrs.volume_usd ?? attrs.volume_in_usd ?? attrs.total_volume_usd ?? 0) || null;
-    if (!poolVol24) poolVol24 = null;
-    if (elTF.txn)   elTF.txn.textContent   = poolTxn.toString();
-    if (elTF.vol)   elTF.vol.textContent   = poolVol24 ? fmtUSD(poolVol24, 0) : "—";
-    if (elTF.net)   elTF.net.textContent   = "—";
-    if (elTF.buys)  elTF.buys.textContent  = "—";
-    if (elTF.sells) elTF.sells.textContent = "—";
+    // prefer summary.volume and summary.txns if present
+    let vol = null, txn = null, buys = null, sells = null;
+    for (const k of candidates) {
+      vol = vol ?? (s.volume && s.volume[k]) ?? (raw.volume && (raw.volume[k] ?? raw.volume?.[k]));
+      txn = txn ?? (s.txns && s.txns[k]) ?? (raw.txns && (raw.txns[k] ?? raw.txns?.[k]));
+      buys = buys ?? (s.buys && s.buys[k]) ?? (raw.txns && raw.txns[k] && raw.txns[k].buys) ?? null;
+      sells = sells ?? (s.sells && s.sells[k]) ?? (raw.txns && raw.txns[k] && raw.txns[k].sells) ?? null;
+    }
 
-  } catch (e){
-    console.error("TF update failed:", e);
+    // normalize values: dexscreener sometimes returns numbers or objects; try to extract USD numeric values
+    const getNumber = v => {
+      if (v == null) return null;
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string') {
+        const n = Number(v.replace(/[^0-9.-]+/g,'')); // strip $ etc
+        return isFinite(n) ? n : null;
+      }
+      if (typeof v === 'object') {
+        // maybe { buys: N, sells: N } or { usd: N}
+        if (v.usd != null) return Number(v.usd);
+        if (v.volume_usd != null) return Number(v.volume_usd);
+      }
+      return null;
+    };
+
+    const volNum = getNumber(vol);
+    const buysNum = getNumber(buys);
+    const sellsNum = getNumber(sells);
+    const txnNum = (typeof txn === 'number') ? txn : (typeof txn === 'string' && /^\d+$/.test(txn) ? Number(txn) : null);
+
+    if (elTF.txn)   elTF.txn.textContent   = txnNum != null ? txnNum.toString() : "—";
+    if (elTF.vol)   elTF.vol.textContent   = volNum != null ? fmtUSD(volNum,0) : "—";
+    if (elTF.net)   elTF.net.textContent   = (buysNum!=null || sellsNum!=null) ? fmtUSD((buysNum||0)-(sellsNum||0),0) : "—";
+    if (elTF.buys)  elTF.buys.textContent  = buysNum != null ? fmtUSD(buysNum,0) : "—";
+    if (elTF.sells) elTF.sells.textContent = sellsNum != null ? fmtUSD(sellsNum,0) : "—";
+
+  } catch (e) {
+    console.error("updateTimeframe failed:", e);
     if (elTF.txn)   elTF.txn.textContent   = "—";
     if (elTF.vol)   elTF.vol.textContent   = "—";
     if (elTF.net)   elTF.net.textContent   = "—";

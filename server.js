@@ -1,101 +1,57 @@
-// server.js
 const express = require('express');
 const path = require('path');
-// Use node-fetch v2 for require() compatibility
-const fetch = require('node-fetch'); // npm i node-fetch@2
+const fetch = require('node-fetch');
+const { ethers } = require('ethers');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Polygon RPC
+const RPC = process.env.POLYGON_RPC || "https://polygon-rpc.com";
+const provider = new ethers.JsonRpcProvider(RPC);
 
-// ---------------------- GeckoTerminal v3 proxy: pool ----------------------
-app.get('/api/gtv3/pool', async (req, res) => {
-  const network = req.query.network;
-  const pool = req.query.pool;
-  if (!network || !pool) return res.status(400).json({ error: "Missing network or pool parameters" });
+// --- Uniswap V3 ABI Snippet (for price & liquidity)
+const IUniswapV3PoolABI = [
+  "function slot0() external view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
+  "function liquidity() external view returns (uint128)",
+  "function token0() external view returns (address)",
+  "function token1() external view returns (address)"
+];
 
-  // GeckoTerminal v3 base path
-  const url = `https://api.geckoterminal.com/api/v3/networks/${network}/pools/${pool}`;
+app.get('/api/v3/pooldata', async (req, res) => {
   try {
-    const response = await fetch(url, { headers: { 'Accept': 'application/json' }});
-    const data = await response.json();
-    // short cache (GT updates frequently)
-    res.set('Cache-Control', 'public, max-age=15, s-maxage=15');
-    res.json(data);
-  } catch (err) {
-    console.error("GT v3 pool proxy error:", err?.message || err);
-    res.status(502).json({ error: "Failed to fetch pool from GeckoTerminal v3" });
-  }
-});
+    const { pool } = req.query;
+    if (!pool) return res.status(400).json({ error: 'Missing ?pool=' });
 
-// ---------------------- GeckoTerminal v3 proxy: trades ----------------------
-app.get('/api/gtv3/trades', async (req, res) => {
-  const network = req.query.network;
-  const pool = req.query.pool;
-  const limit = req.query.limit || 500;
-  if (!network || !pool) return res.status(400).json({ error: "Missing network or pool parameters" });
+    const poolContract = new ethers.Contract(pool, IUniswapV3PoolABI, provider);
 
-  const url = `https://api.geckoterminal.com/api/v3/networks/${network}/pools/${pool}/trades?limit=${limit}`;
-  try {
-    const response = await fetch(url, { headers: { 'Accept': 'application/json' }});
-    const data = await response.json();
-    res.set('Cache-Control', 'public, max-age=10, s-maxage=10');
-    res.json(data);
-  } catch (err) {
-    console.error("GT v3 trades proxy error:", err?.message || err);
-    res.status(502).json({ error: "Failed to fetch trades from GeckoTerminal v3" });
-  }
-});
+    const [slot0, liquidity, token0, token1] = await Promise.all([
+      poolContract.slot0(),
+      poolContract.liquidity(),
+      poolContract.token0(),
+      poolContract.token1(),
+    ]);
 
-// ---------------------- Uniswap V3 Subgraph fallback ----------------------
-app.get('/api/uni/pool', async (req, res) => {
-  const network = req.query.network || "polygon";
-  const pool = req.query.pool;
-  if (!pool) return res.status(400).json({ error: "Missing pool parameter" });
+    const sqrtPriceX96 = slot0[0];
+    const price = (sqrtPriceX96 / 2 ** 96) ** 2;
 
-  // Uniswap V3 Polygon subgraph (maintained by Messari)
-  const subgraphUrl = "https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-v3-polygon";
-
-  // GraphQL query: last 24h volume + tx count + token prices
-  const query = {
-    query: `
-      {
-        pool(id: "${pool.toLowerCase()}") {
-          id
-          token0 { symbol decimals }
-          token1 { symbol decimals }
-          volumeUSD
-          totalValueLockedUSD
-          txCount
-          feesUSD
-          totalValueLockedToken0
-          totalValueLockedToken1
-        }
-      }
-    `
-  };
-
-  try {
-    const response = await fetch(subgraphUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(query)
+    res.json({
+      token0,
+      token1,
+      sqrtPriceX96: sqrtPriceX96.toString(),
+      liquidity: liquidity.toString(),
+      price,
+      tick: slot0.tick,
     });
-    const json = await response.json();
 
-    if (json?.data?.pool) {
-      res.set('Cache-Control', 'public, max-age=15');
-      res.json(json.data.pool);
-    } else {
-      res.status(404).json({ error: "Pool not found in subgraph" });
-    }
   } catch (err) {
-    console.error("Uniswap v3 subgraph error:", err.message);
-    res.status(502).json({ error: "Failed to fetch from Uniswap v3 subgraph" });
+    console.error("Error fetching v3 pool:", err);
+    res.status(500).json({ error: 'Failed to fetch Uniswap v3 pool data', details: err.message });
   }
 });
 
-// SPA fallback
+// --- serve frontend
+app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/index.html'));
 });

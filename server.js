@@ -54,12 +54,16 @@ app.get('/api/dex/pair', async (req, res) => {
       // in case dexscreener exposes buys/sells split (some versions do)
       buys: {
         '5m': pairData?.buys?.m5 ?? null,
+        '15m': pairData?.buys?.m15 ?? null,
+        '30m': pairData?.buys?.m30 ?? null,
         '1h': pairData?.buys?.h1 ?? null,
         '6h': pairData?.buys?.h6 ?? null,
         '24h': pairData?.buys?.h24 ?? null,
       },
       sells: {
         '5m': pairData?.sells?.m5 ?? null,
+        '15m': pairData?.sells?.m15 ?? null,
+        '30m': pairData?.sells?.m30 ?? null,
         '1h': pairData?.sells?.h1 ?? null,
         '6h': pairData?.sells?.h6 ?? null,
         '24h': pairData?.sells?.h24 ?? null,

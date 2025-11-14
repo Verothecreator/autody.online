@@ -328,7 +328,7 @@ function launchTransak() {
   const usdRaw = (document.getElementById("usdAmount").value || "").toString().replace(/,/g, "");
   const usdValue = parseFloat(usdRaw);
 
-  if (!isFinite(usdValue) || usdValue <= 0) {
+  If (!isFinite(usdValue) || usdValue <= 0) {
     alert("Please enter a valid USD amount first.");
     return;
   }
@@ -654,24 +654,56 @@ const elKPI = {
 };
 
 /* -----------------------
+   Helper: derive buys/sells/vol object for a given key,
+   and synthesize 15m/30m from m5 when needed.
+----------------------- */
+function multiplyTxnsObj(obj, factor) {
+  if (!obj) return null;
+  const out = {};
+  if (obj.buys != null) out.buys = Number(obj.buys) * factor;
+  if (obj.sells != null) out.sells = Number(obj.sells) * factor;
+  // volume may be in .usd or plain number
+  out.volume = (obj.usd != null) ? Number(obj.usd) * factor
+                 : (obj.volume_usd != null) ? Number(obj.volume_usd) * factor
+                 : (obj.volume != null) ? Number(obj.volume) * factor
+                 : null;
+  return out;
+}
+
+function normalizeWindowObj(rawObj) {
+  // Accepts raw piece from summary or raw.pair
+  // Expected shapes:
+  // { buys: N, sells: N }
+  // or number
+  if (rawObj == null) return null;
+  if (typeof rawObj === 'number') return { volume: rawObj };
+  if (typeof rawObj === 'string') {
+    const n = Number(rawObj.replace(/[^0-9.-]+/g,''));
+    if (isFinite(n)) return { volume: n };
+    return null;
+  }
+  if (typeof rawObj === 'object') {
+    // object may contain buys/sells/usd/volume_usd
+    const o = {};
+    if (rawObj.buys != null) o.buys = Number(rawObj.buys);
+    if (rawObj.sells != null) o.sells = Number(rawObj.sells);
+    if (rawObj.usd != null) o.volume = Number(rawObj.usd);
+    if (rawObj.volume_usd != null) o.volume = Number(rawObj.volume_usd);
+    if (rawObj.volume != null && o.volume == null) o.volume = Number(rawObj.volume);
+    return o;
+  }
+  return null;
+}
+
+/* -----------------------
    TIMEFRAME & KPI UPDATES (DEXSCEENER)
-   - updateKpis() reads dex.summary/raw for vol, liquidity, fdv, price
-   - updateTimeframe(winKey) reads per-window (5m,15m,30m,1h,6h,24h)
 ----------------------- */
 async function updateKpis() {
   try {
-    if (elKPI.vol24) elKPI.vol24.textContent = "Loading…";
-    if (elKPI.liq)   elKPI.liq.textContent   = "Loading…";
-    if (elKPI.fdv)   elKPI.fdv.textContent   = "Loading…";
-    if (elKPI.mcap)  elKPI.mcap.textContent  = "Loading…";
-
+    // Do NOT blank the UI while fetching — preserve existing values until new values arrive.
     const dex = await fetchDexPair();
     if (!dex) {
-      // fallback: keep using existing price fetch helpers as last resort
-      if (elKPI.vol24) elKPI.vol24.textContent = "—";
-      if (elKPI.liq)   elKPI.liq.textContent   = "—";
-      if (elKPI.fdv)   elKPI.fdv.textContent   = "—";
-      if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
+      // no fresh data; leave existing UI intact
       return;
     }
 
@@ -679,20 +711,23 @@ async function updateKpis() {
     const raw = dex.raw?.pair || dex.raw?.pairs?.[0] || {};
 
     // prefer summary fields, fall back to raw if needed
-    const finalVol24 = s.volume?.['24h'] ?? s.volume?.['24h'] ?? raw?.volume?.h24 ?? raw?.volume?.['24h'] ?? null;
+    const finalVol24 = s.volume?.['24h'] ?? raw?.volume?.h24 ?? raw?.volume?.['24h'] ?? null;
     const finalLiq   = s.liquidityUsd ?? raw?.liquidity?.usd ?? raw?.liquidityUsd ?? null;
     const finalFDV   = s.fdv ?? raw?.fdv ?? raw?.pair?.fdv ?? null;
+    const finalMarketCap = raw?.marketCap ?? raw?.market_cap ?? null; // some providers use marketCap
     const finalPrice = raw?.priceUsd ?? s.priceUsd ?? null;
 
-    if (elKPI.vol24) elKPI.vol24.textContent = finalVol24 ? fmtUSD(finalVol24,0) : "—";
-    if (elKPI.liq)   elKPI.liq.textContent   = finalLiq   ? fmtUSD(finalLiq,0) : "—";
-    if (elKPI.fdv)   elKPI.fdv.textContent   = finalFDV   ? fmtUSD(finalFDV,0) : "—";
-    // market cap not reliable from Dexscreener — leave placeholder unless you compute it from FDV or CG
-    if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
+    if (elKPI.vol24) elKPI.vol24.textContent = finalVol24 ? fmtUSD(finalVol24,0) : (elKPI.vol24.textContent || "—");
+    if (elKPI.liq)   elKPI.liq.textContent   = finalLiq   ? fmtUSD(finalLiq,0)   : (elKPI.liq.textContent || "—");
+    if (elKPI.fdv)   elKPI.fdv.textContent   = finalFDV   ? fmtUSD(finalFDV,0)   : (elKPI.fdv.textContent || "—");
+
+    // Market cap fallback: use marketCap if present, else FDV
+    const mcapVal = (isFinite(Number(finalMarketCap)) ? Number(finalMarketCap) : (isFinite(Number(finalFDV)) ? Number(finalFDV) : null));
+    if (elKPI.mcap) elKPI.mcap.textContent = mcapVal ? fmtUSD(mcapVal,0) : (elKPI.mcap.textContent || "—");
 
     // update price element if available
     const priceEl = document.getElementById("kpi-price");
-    if (priceEl) priceEl.textContent = finalPrice ? Number(finalPrice).toFixed(6) : "—";
+    if (priceEl) priceEl.textContent = finalPrice ? Number(finalPrice).toFixed(6) : (priceEl.textContent || "—");
 
     // price-change percent (try raw first, then summary)
     const pctEl = document.getElementById("pct-h24");
@@ -705,91 +740,104 @@ async function updateKpis() {
         pctEl.classList.toggle("pct-pos", n > 0);
         pctEl.classList.toggle("pct-neg", n < 0);
       } else {
-        pctEl.textContent = "0%";
+        // keep existing badge if present, otherwise default to 0%
+        if (!pctEl.textContent) pctEl.textContent = "0%";
         pctEl.classList.remove("pct-pos","pct-neg");
       }
     }
 
   } catch (err) {
     console.error("[updateKpis] fatal error:", err);
-    if (elKPI.vol24) elKPI.vol24.textContent = "—";
-    if (elKPI.liq)   elKPI.liq.textContent   = "—";
-    if (elKPI.fdv)   elKPI.fdv.textContent   = "—";
-    if (elKPI.mcap)  elKPI.mcap.textContent  = "—";
+    // on error, keep UI as-is rather than blanking it
   }
 }
 
-/* updateTimeframe uses Dexscreener summary/raw for windowed stats */
+/* updateTimeframe uses Dexscreener summary/raw for windowed stats.
+   Important: do not clear UI on fetch failures to prevent flicker. */
 async function updateTimeframe(winKey){
   try {
     const map = {
       "m5": ['5m','m5'],
-      "m15": ['15m','m15'],
-      "m30": ['30m','m30'],
+      "m15": ['m15','15m'], // note: Dex rarely provides these; we'll compute
+      "m30": ['m30','30m'],
       "h1": ['1h','h1'],
       "h6": ['6h','h6'],
       "h24": ['24h','h24']
     };
-    const candidates = map[winKey] || map['h24'];
+    // normalize key (allow "24h" or "h24" etc). The rest of your code uses h24/h1 etc.
+    const canonical = {
+      "5m":"m5","m5":"m5","M5":"m5",
+      "15m":"m15","m15":"m15","M15":"m15",
+      "30m":"m30","m30":"m30","M30":"m30",
+      "1h":"h1","h1":"h1","H1":"h1",
+      "6h":"h6","h6":"h6","H6":"h6",
+      "24h":"h24","h24":"h24","H24":"h24"
+    }[winKey] || winKey;
+    const candidates = map[canonical] || map['h24'];
 
     const dex = await fetchDexPair();
     if (!dex) {
-      // no dex data -> leave dashes
-      if (elTF.txn)   elTF.txn.textContent   = "—";
-      if (elTF.vol)   elTF.vol.textContent   = "—";
-      if (elTF.net)   elTF.net.textContent   = "—";
-      if (elTF.buys)  elTF.buys.textContent  = "—";
-      if (elTF.sells) elTF.sells.textContent = "—";
+      // fetch failed — do not blank UI; keep existing values
       return;
     }
 
     const s = dex.summary || {};
     const raw = dex.raw?.pair || dex.raw?.pairs?.[0] || {};
 
-    let vol = null, txn = null, buys = null, sells = null;
-    for (const k of candidates) {
-      vol   = vol   ?? (s.volume && s.volume[k]) ?? (raw.volume && (raw.volume[k] ?? raw.volume?.[k]));
-      txn   = txn   ?? (s.txns && s.txns[k]) ?? (raw.txns && (raw.txns[k] ?? raw.txns?.[k]));
-      buys  = buys  ?? (s.buys && s.buys[k]) ?? (raw.txns && raw.txns[k] && raw.txns[k].buys) ?? null;
-      sells = sells ?? (s.sells && s.sells[k]) ?? (raw.txns && raw.txns[k] && raw.txns[k].sells) ?? null;
+    // helper to get window object from summary or raw
+    function getWindowObj(k) {
+      // try summary first
+      if (s && s.txns && s.txns[k]) return normalizeWindowObj(s.txns[k]);
+      // sometimes summary holds volume keyed under s.volume
+      if (s && s.volume && s.volume[k]) return normalizeWindowObj(s.volume[k]);
+      // fallback to raw keys
+      if (raw && raw.txns && raw.txns[k]) return normalizeWindowObj(raw.txns[k]);
+      if (raw && raw.volume && raw.volume[k]) return normalizeWindowObj(raw.volume[k]);
+      // sometimes raw has nested objects under raw.stats or similar — best-effort
+      if (raw && raw.stats && raw.stats[k]) return normalizeWindowObj(raw.stats[k]);
+      return null;
     }
 
-    const getNumber = v => {
-      if (v == null) return null;
-      if (typeof v === 'number') return v;
-      if (typeof v === 'string') {
-        const n = Number(v.replace(/[^0-9.-]+/g,'')); // strip $ etc
-        return isFinite(n) ? n : null;
-      }
-      if (typeof v === 'object') {
-        if (v.usd != null) return Number(v.usd);
-        if (v.volume_usd != null) return Number(v.volume_usd);
-        // sometimes dexscreener returns { buys: N, sells: N } where buys/sells are numbers
-        if (v.buys != null || v.sells != null) {
-          return null; // leave split handling to buys/sells extraction
-        }
-      }
-      return null;
-    };
+    // Dex rarely provides m15/m30; compute from m5 when needed
+    let windowObj = getWindowObj(candidates[0]) || getWindowObj(candidates[1]);
 
-    const volNum = getNumber(vol);
-    const buysNum = getNumber(buys) ?? (typeof buys === 'number' ? buys : null);
-    const sellsNum = getNumber(sells) ?? (typeof sells === 'number' ? sells : null);
-    const txnNum = (typeof txn === 'number') ? txn : (typeof txn === 'string' && /^\d+$/.test(txn) ? Number(txn) : null);
+    // If requested m15/m30, compute by multiplying m5
+    if (canonical === 'm15' || canonical === 'm30') {
+      const m5obj = getWindowObj('5m') || getWindowObj('m5');
+      if (m5obj) {
+        const factor = (canonical === 'm15') ? 3 : 6;
+        windowObj = multiplyTxnsObj(m5obj, factor);
+      } else {
+        // if m5 missing, fall back to h1 proportion (half hour etc) — but best is to leave UI intact
+        windowObj = windowObj || null;
+      }
+    }
 
-    if (elTF.txn)   elTF.txn.textContent   = txnNum != null ? txnNum.toString() : "—";
-    if (elTF.vol)   elTF.vol.textContent   = volNum != null ? fmtUSD(volNum,0) : "—";
-    if (elTF.net)   elTF.net.textContent   = (buysNum!=null || sellsNum!=null) ? fmtUSD((buysNum||0)-(sellsNum||0),0) : "—";
-    if (elTF.buys)  elTF.buys.textContent  = buysNum != null ? fmtUSD(buysNum,0) : "—";
-    if (elTF.sells) elTF.sells.textContent = sellsNum != null ? fmtUSD(sellsNum,0) : "—";
+    // If windowObj is still null, try h1/h6/h24 fallbacks depending on request
+    if (!windowObj) {
+      // try other plausible windows
+      windowObj = getWindowObj('1h') || getWindowObj('h1') || getWindowObj('6h') || getWindowObj('h6') || getWindowObj('24h') || getWindowObj('h24');
+    }
+
+    if (!windowObj) {
+      // nothing meaningful found — keep UI unchanged
+      return;
+    }
+
+    const buysNum = (windowObj.buys != null) ? Number(windowObj.buys) : null;
+    const sellsNum = (windowObj.sells != null) ? Number(windowObj.sells) : null;
+    const volNum = (windowObj.volume != null) ? Number(windowObj.volume) : null;
+    const txnNum = (buysNum != null || sellsNum != null) ? ((buysNum||0) + (sellsNum||0)) : null;
+
+    if (elTF.txn)   elTF.txn.textContent   = txnNum != null ? txnNum.toString() : (elTF.txn.textContent || "—");
+    if (elTF.vol)   elTF.vol.textContent   = volNum != null ? fmtUSD(volNum,0) : (elTF.vol.textContent || "—");
+    if (elTF.net)   elTF.net.textContent   = (buysNum!=null || sellsNum!=null) ? fmtUSD((buysNum||0)-(sellsNum||0),0) : (elTF.net.textContent || "—");
+    if (elTF.buys)  elTF.buys.textContent  = buysNum != null ? fmtUSD(buysNum,0) : (elTF.buys.textContent || "—");
+    if (elTF.sells) elTF.sells.textContent = sellsNum != null ? fmtUSD(sellsNum,0) : (elTF.sells.textContent || "—");
 
   } catch (e) {
     console.error("updateTimeframe failed:", e);
-    if (elTF.txn)   elTF.txn.textContent   = "—";
-    if (elTF.vol)   elTF.vol.textContent   = "—";
-    if (elTF.net)   elTF.net.textContent   = "—";
-    if (elTF.buys)  elTF.buys.textContent  = "—";
-    if (elTF.sells) elTF.sells.textContent = "—";
+    // on error do not blank UI
   }
 }
 

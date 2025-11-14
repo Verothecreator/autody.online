@@ -663,7 +663,6 @@ function multiplyTxnsObj(obj, factor) {
   const out = {};
   if (obj.buys != null) out.buys = Math.round(Number(obj.buys) * factor);
   if (obj.sells != null) out.sells = Math.round(Number(obj.sells) * factor);
-  // volume may be in .usd or plain number
   const volRaw = (obj.usd != null) ? Number(obj.usd)
                 : (obj.volume_usd != null) ? Number(obj.volume_usd)
                 : (obj.volume != null) ? Number(obj.volume)
@@ -673,8 +672,6 @@ function multiplyTxnsObj(obj, factor) {
 }
 
 function normalizeWindowObj(rawObj) {
-  // Accepts raw piece from summary or raw.pair
-  // Returns { buys?, sells?, volume? } where buys/sells are integer counts, volume is USD number
   if (rawObj == null) return null;
   if (typeof rawObj === 'number') return { volume: rawObj };
   if (typeof rawObj === 'string') {
@@ -684,22 +681,28 @@ function normalizeWindowObj(rawObj) {
   }
   if (typeof rawObj === 'object') {
     const o = {};
+    // sometimes rawObj = { buys: N, sells: N } (counts)
     if (rawObj.buys != null) o.buys = Math.round(Number(rawObj.buys));
     if (rawObj.sells != null) o.sells = Math.round(Number(rawObj.sells));
+    // sometimes rawObj contains USD numbers under usd / volume_usd / volume
     if (rawObj.usd != null && isFinite(Number(rawObj.usd))) o.volume = Number(rawObj.usd);
     else if (rawObj.volume_usd != null && isFinite(Number(rawObj.volume_usd))) o.volume = Number(rawObj.volume_usd);
     else if (rawObj.volume != null && isFinite(Number(rawObj.volume))) o.volume = Number(rawObj.volume);
+    // sometimes rawObj contains buysUsd/sellsUsd fields:
+    if (rawObj.buys_usd != null && isFinite(Number(rawObj.buys_usd))) o.buysUsd = Number(rawObj.buys_usd);
+    if (rawObj.sells_usd != null && isFinite(Number(rawObj.sells_usd))) o.sellsUsd = Number(rawObj.sells_usd);
+    // some shapes: s.buys[k] may be a number (USD) — caller should handle
+    if (rawObj.usd_buys != null && isFinite(Number(rawObj.usd_buys))) o.buysUsd = Number(rawObj.usd_buys);
+    if (rawObj.usd_sells != null && isFinite(Number(rawObj.usd_sells))) o.sellsUsd = Number(rawObj.usd_sells);
     return o;
   }
   return null;
 }
 
 function normalizePctValue(raw) {
-  // Dex may return 0.05 (=> 5%) or 5 (=> 5). Normalize to percentage number.
   if (raw == null) return null;
   const n = Number(raw);
   if (!isFinite(n)) return null;
-  // If value looks like a fraction (<= 1.5) treat as decimal fraction -> multiply by 100
   if (Math.abs(n) <= 1.5) return n * 100;
   return n;
 }
@@ -714,10 +717,19 @@ function normalizePctValue(raw) {
 // -----------------------
 async function updateKpis() {
   try {
-    // Do NOT blank the UI while fetching — preserve existing values until new values arrive.
+    // show loading placeholders (non-destructive)
+    if (elKPI.vol24) elKPI.vol24.textContent = "Loading…";
+    if (elKPI.liq)   elKPI.liq.textContent   = "Loading…";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = "Loading…";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = "Loading…";
+
     const dex = await fetchDexPair();
     if (!dex) {
-      // no fresh data; leave existing UI intact
+      // leave current UI intact if fetch fails
+      if (elKPI.vol24) elKPI.vol24.textContent = elKPI.vol24.textContent || "—";
+      if (elKPI.liq)   elKPI.liq.textContent   = elKPI.liq.textContent || "—";
+      if (elKPI.fdv)   elKPI.fdv.textContent   = elKPI.fdv.textContent || "—";
+      if (elKPI.mcap)  elKPI.mcap.textContent  = elKPI.mcap.textContent || "—";
       return;
     }
 
@@ -725,17 +737,18 @@ async function updateKpis() {
     const raw = dex.raw?.pair || dex.raw?.pairs?.[0] || {};
 
     // prefer summary fields, fall back to raw if needed
-    const finalVol24 = s.volume?.['24h'] ?? raw?.volume?.h24 ?? raw?.volume?.['24h'] ?? null;
+    const finalVol24 = (s.volume && (s.volume['24h'] ?? s.volume['24H'] ?? s.volume.h24)) 
+                        ?? raw?.volume?.h24 ?? raw?.volume?.['24h'] ?? null;
     const finalLiq   = s.liquidityUsd ?? raw?.liquidity?.usd ?? raw?.liquidityUsd ?? null;
     const finalFDV   = s.fdv ?? raw?.fdv ?? raw?.pair?.fdv ?? null;
-    const finalMarketCap = raw?.marketCap ?? raw?.market_cap ?? null; // some providers use marketCap
+    const finalMarketCap = raw?.marketCap ?? raw?.market_cap ?? s.marketCap ?? null;
     const finalPrice = raw?.priceUsd ?? s.priceUsd ?? null;
 
     if (elKPI.vol24) elKPI.vol24.textContent = finalVol24 ? fmtUSD(finalVol24,0) : (elKPI.vol24.textContent || "—");
     if (elKPI.liq)   elKPI.liq.textContent   = finalLiq   ? fmtUSD(finalLiq,0)   : (elKPI.liq.textContent || "—");
     if (elKPI.fdv)   elKPI.fdv.textContent   = finalFDV   ? fmtUSD(finalFDV,0)   : (elKPI.fdv.textContent || "—");
 
-    // Market cap fallback: use marketCap if present, else FDV
+    // Market cap fallback: raw market cap -> FDV -> keep existing
     const mcapVal = (isFinite(Number(finalMarketCap)) ? Number(finalMarketCap) : (isFinite(Number(finalFDV)) ? Number(finalFDV) : null));
     if (elKPI.mcap) elKPI.mcap.textContent = mcapVal ? fmtUSD(mcapVal,0) : (elKPI.mcap.textContent || "—");
 
@@ -743,26 +756,29 @@ async function updateKpis() {
     const priceEl = document.getElementById("kpi-price");
     if (priceEl) priceEl.textContent = finalPrice ? Number(finalPrice).toFixed(6) : (priceEl.textContent || "—");
 
-    // price-change percent (try raw first, then summary)
+    // price-change percent
     const pctEl = document.getElementById("pct-h24");
-    const pcp = raw?.priceChange?.h24 ?? raw?.priceChangePercent ?? raw?.price_change_percent ?? null;
+    const pcpCandidate = raw?.priceChange ?? raw?.price_change ?? raw?.priceChangePercent ?? raw?.price_change_percent ?? s.priceChange ?? null;
+    const pctVal = normalizePctValue(pcpCandidate?.h24 ?? pcpCandidate?.['24h'] ?? pcpCandidate);
     if (pctEl) {
-      if (pcp != null && isFinite(Number(pcp))) {
-        const n = Number(pcp);
+      if (pctVal != null) {
+        const n = pctVal;
         const sign = n > 0 ? "+" : (n < 0 ? "" : "");
         pctEl.textContent = `${sign}${n.toFixed(2)}%`;
         pctEl.classList.toggle("pct-pos", n > 0);
         pctEl.classList.toggle("pct-neg", n < 0);
       } else {
-        // keep existing badge if present, otherwise default to 0%
-        if (!pctEl.textContent) pctEl.textContent = "0%";
+        pctEl.textContent = pctEl.textContent || "0%";
         pctEl.classList.remove("pct-pos","pct-neg");
       }
     }
-
   } catch (err) {
     console.error("[updateKpis] fatal error:", err);
-    // on error, keep UI as-is rather than blanking it
+    // keep current UI intact on error
+    if (elKPI.vol24) elKPI.vol24.textContent = elKPI.vol24.textContent || "—";
+    if (elKPI.liq)   elKPI.liq.textContent   = elKPI.liq.textContent || "—";
+    if (elKPI.fdv)   elKPI.fdv.textContent   = elKPI.fdv.textContent || "—";
+    if (elKPI.mcap)  elKPI.mcap.textContent  = elKPI.mcap.textContent || "—";
   }
 }
 // --- CHANGED END ---
@@ -794,70 +810,174 @@ async function updateTimeframe(winKey){
 
     const dex = await fetchDexPair();
     if (!dex) {
-      // keep existing UI values instead of blanking
+      // keep UI intact
       return;
     }
 
     const s = dex.summary || {};
     const raw = dex.raw?.pair || dex.raw?.pairs?.[0] || {};
 
+    // helper: try to build a stats object for a window key
     function getWindowObj(k) {
       if (!k) return null;
-      // try summary first (txns object or volume object)
-      if (s && s.txns && s.txns[k]) return normalizeWindowObj(s.txns[k]);
-      if (s && s.buys && s.buys[k]) return normalizeWindowObj({ buys: s.buys[k], sells: s.sells?.[k], usd: s.volume?.[k] });
-      if (s && s.volume && s.volume[k]) return normalizeWindowObj(s.volume[k]);
-      // raw fallbacks
-      if (raw && raw.txns && raw.txns[k]) return normalizeWindowObj(raw.txns[k]);
-      if (raw && raw.volume && raw.volume[k]) return normalizeWindowObj(raw.volume[k]);
-      if (raw && raw.stats && raw.stats[k]) return normalizeWindowObj(raw.stats[k]);
+
+      // Summary-level fields (preferred)
+      // summary might contain: s.buys[k] (USD), s.sells[k] (USD), s.txns[k] (number), s.volume[k] (USD)
+      if (s) {
+        // case: buys/sells summary with USD amounts
+        if (s.buys && s.buys[k] != null) {
+          const buysUsd = (typeof s.buys[k] === 'object' && s.buys[k].usd!=null) ? Number(s.buys[k].usd) : Number(s.buys[k]);
+          const sellsUsd = (s.sells && s.sells[k] != null) ? ((typeof s.sells[k] === 'object' && s.sells[k].usd!=null) ? Number(s.sells[k].usd) : Number(s.sells[k])) : null;
+          const vol = (s.volume && s.volume[k] != null) ? (typeof s.volume[k] === 'object' ? Number(s.volume[k].usd ?? s.volume[k].volume_usd ?? s.volume[k].volume ?? 0) : Number(s.volume[k])) : null;
+          const txns = (s.txns && s.txns[k] != null) ? s.txns[k] : null;
+          const out = {};
+          if (isFinite(buysUsd)) out.buysUsd = buysUsd;
+          if (isFinite(sellsUsd)) out.sellsUsd = sellsUsd;
+          if (isFinite(vol)) out.volume = vol;
+          if (isFinite(Number(txns))) out.txnCount = Number(txns);
+          return out;
+        }
+        // case: s.txns[k] exists and may be a number or object with buys/sells counts
+        if (s.txns && s.txns[k] != null) {
+          const v = s.txns[k];
+          if (typeof v === 'number') return { txnCount: v };
+          if (typeof v === 'object') {
+            // try to extract counts
+            const out = {};
+            if (v.buys != null) out.buys = Math.round(Number(v.buys));
+            if (v.sells != null) out.sells = Math.round(Number(v.sells));
+            // maybe they include usd fields
+            if (v.buys_usd != null && isFinite(Number(v.buys_usd))) out.buysUsd = Number(v.buys_usd);
+            if (v.sells_usd != null && isFinite(Number(v.sells_usd))) out.sellsUsd = Number(v.sells_usd);
+            if (v.volume_usd != null && isFinite(Number(v.volume_usd))) out.volume = Number(v.volume_usd);
+            return out;
+          }
+        }
+        // case: s.volume contains usd directly
+        if (s.volume && s.volume[k] != null) {
+          const volVal = s.volume[k];
+          if (typeof volVal === 'number') return { volume: volVal };
+          if (typeof volVal === 'object' && volVal.usd != null) return { volume: Number(volVal.usd) };
+          if (typeof volVal === 'string') {
+            const n = Number(volVal.replace(/[^0-9.-]+/g,'')); if (isFinite(n)) return { volume: n };
+          }
+        }
+      }
+
+      // raw-level fallbacks
+      if (raw) {
+        // raw.txns[k] often contains { buys: N, sells: N, buys_usd?, sells_usd? }
+        if (raw.txns && raw.txns[k] != null) {
+          const v = raw.txns[k];
+          const normalized = normalizeWindowObj(v);
+          // normalized may include buys/sells counts and buysUsd/sellsUsd/volume
+          return normalized;
+        }
+        // raw.volume[k] often contains { usd: N } or number
+        if (raw.volume && raw.volume[k] != null) {
+          const v = raw.volume[k];
+          if (typeof v === 'number') return { volume: v };
+          if (typeof v === 'object' && v.usd != null) return { volume: Number(v.usd) };
+          if (typeof v === 'string') {
+            const n = Number(v.replace(/[^0-9.-]+/g,'')); if (isFinite(n)) return { volume: n };
+          }
+        }
+        // sometimes raw.priceChange or raw.stats
+        if (raw.stats && raw.stats[k]) {
+          const norm = normalizeWindowObj(raw.stats[k]);
+          if (norm) return norm;
+        }
+      }
+
       return null;
     }
 
-    // primary attempt
+    // Primary try
     let windowObj = getWindowObj(candidates[0]) || getWindowObj(candidates[1]);
 
-    // compute m15/m30 from m5 if requested
+    // If user requested m15/m30 and upstream missing, compute from m5
     if (canonical === 'm15' || canonical === 'm30') {
       const m5obj = getWindowObj('5m') || getWindowObj('m5');
       if (m5obj) {
         const factor = (canonical === 'm15') ? 3 : 6;
         windowObj = multiplyTxnsObj(m5obj, factor);
+        // if m5 provided buysUsd/sellsUsd, also scale them
+        if (m5obj.buysUsd != null || m5obj.sellsUsd != null) {
+          windowObj.buysUsd = isFinite(Number(m5obj.buysUsd)) ? Number(m5obj.buysUsd) * factor : undefined;
+          windowObj.sellsUsd = isFinite(Number(m5obj.sellsUsd)) ? Number(m5obj.sellsUsd) * factor : undefined;
+        }
       } else {
-        // fallback: try to scale from 1h or leave UI unchanged
-        const h1obj = getWindowObj('1h') || getWindowObj('h1');
-        if (h1obj) {
+        // fallback: scale from 1h
+        const h1 = getWindowObj('1h') || getWindowObj('h1');
+        if (h1) {
           const factor = (canonical === 'm15') ? (15/60) : (30/60);
-          windowObj = multiplyTxnsObj(h1obj, factor);
+          windowObj = multiplyTxnsObj(h1, factor);
+          if (h1.buysUsd != null || h1.sellsUsd != null) {
+            windowObj.buysUsd = isFinite(Number(h1.buysUsd)) ? Number(h1.buysUsd) * factor : undefined;
+            windowObj.sellsUsd = isFinite(Number(h1.sellsUsd)) ? Number(h1.sellsUsd) * factor : undefined;
+          }
         }
       }
     }
 
-    // final fallbacks
+    // If still missing, try other fallbacks
     if (!windowObj) {
       windowObj = getWindowObj('1h') || getWindowObj('h1') || getWindowObj('6h') || getWindowObj('h6') || getWindowObj('24h') || getWindowObj('h24');
     }
 
     if (!windowObj) {
-      // nothing to show — keep UI as-is
+      // nothing reliable — keep UI unchanged
       return;
     }
 
-    const buysNum = (windowObj.buys != null && isFinite(Number(windowObj.buys))) ? Math.round(Number(windowObj.buys)) : null;
-    const sellsNum = (windowObj.sells != null && isFinite(Number(windowObj.sells))) ? Math.round(Number(windowObj.sells)) : null;
-    const volNum = (windowObj.volume != null && isFinite(Number(windowObj.volume))) ? Number(windowObj.volume) : null;
-    const txnNum = (buysNum != null || sellsNum != null) ? ((buysNum||0) + (sellsNum||0)) : null;
+    // Extract counts and USD values:
+    const buysCount = (windowObj.buys != null && isFinite(Number(windowObj.buys))) ? Math.round(Number(windowObj.buys)) : null;
+    const sellsCount = (windowObj.sells != null && isFinite(Number(windowObj.sells))) ? Math.round(Number(windowObj.sells)) : null;
+    // try find buysUsd/sellsUsd from several possible locations
+    let buysUsd = null, sellsUsd = null;
+    if (windowObj.buysUsd != null && isFinite(Number(windowObj.buysUsd))) buysUsd = Number(windowObj.buysUsd);
+    if (windowObj.sellsUsd != null && isFinite(Number(windowObj.sellsUsd))) sellsUsd = Number(windowObj.sellsUsd);
 
-    // show buys/sells as plain numbers (no currency)
-    if (elTF.txn)   elTF.txn.textContent   = txnNum != null ? txnNum.toString() : (elTF.txn.textContent || "—");
-    if (elTF.vol)   elTF.vol.textContent   = volNum != null ? fmtUSD(volNum,0) : (elTF.vol.textContent || "—");
-    if (elTF.net)   elTF.net.textContent   = (buysNum!=null || sellsNum!=null) ? ((buysNum||0) - (sellsNum||0)).toString() : (elTF.net.textContent || "—");
-    if (elTF.buys)  elTF.buys.textContent  = buysNum != null ? buysNum.toString() : (elTF.buys.textContent || "—");
-    if (elTF.sells) elTF.sells.textContent = sellsNum != null ? sellsNum.toString() : (elTF.sells.textContent || "—");
+    // some sources use s.buys[k] as USD directly (we handled above) or raw shapes — attempt to pick from summary as fallback
+    if (buysUsd == null && s && s.buys && s.buys[candidates[0]] != null) {
+      const v = s.buys[candidates[0]]; buysUsd = (typeof v === 'object' && v.usd!=null) ? Number(v.usd) : (isFinite(Number(v)) ? Number(v) : null);
+    }
+    if (sellsUsd == null && s && s.sells && s.sells[candidates[0]] != null) {
+      const v = s.sells[candidates[0]]; sellsUsd = (typeof v === 'object' && v.usd!=null) ? Number(v.usd) : (isFinite(Number(v)) ? Number(v) : null);
+    }
+
+    // volume
+    let volUsd = null;
+    if (windowObj.volume != null && isFinite(Number(windowObj.volume))) volUsd = Number(windowObj.volume);
+    // fallback to summary
+    if (volUsd == null && s && s.volume && (s.volume[candidates[0]] != null)) {
+      const v = s.volume[candidates[0]];
+      volUsd = (typeof v === 'object' && v.usd!=null) ? Number(v.usd) : (isFinite(Number(v)) ? Number(v) : null);
+    }
+    if (volUsd == null && raw && raw.volume && raw.volume[candidates[0]] != null) {
+      const v = raw.volume[candidates[0]];
+      volUsd = (typeof v === 'object' && v.usd!=null) ? Number(v.usd) : (isFinite(Number(v)) ? Number(v) : null);
+    }
+
+    // txn count: prefer explicit txnCount, else sum buys/sells counts
+    let txnCount = null;
+    if (windowObj.txnCount != null && isFinite(Number(windowObj.txnCount))) txnCount = Number(windowObj.txnCount);
+    if (txnCount == null && (buysCount != null || sellsCount != null)) txnCount = (buysCount||0) + (sellsCount||0);
+
+    // net buy (USD) if we have USD info
+    let netBuyUsd = null;
+    if (buysUsd != null || sellsUsd != null) netBuyUsd = (buysUsd||0) - (sellsUsd||0);
+
+    // write to DOM:
+    if (elTF.txn)   elTF.txn.textContent   = (txnCount != null) ? txnCount.toString() : (elTF.txn.textContent || "—");
+    if (elTF.vol)   elTF.vol.textContent   = (volUsd != null) ? fmtUSD(volUsd,0) : (elTF.vol.textContent || "—");
+    if (elTF.net)   elTF.net.textContent   = (netBuyUsd != null && isFinite(netBuyUsd)) ? fmtUSD(netBuyUsd, 0) : (elTF.net.textContent || "—");
+    if (elTF.buys)  elTF.buys.textContent  = (buysCount != null) ? buysCount.toString() : (elTF.buys.textContent || "—");
+    if (elTF.sells) elTF.sells.textContent = (sellsCount != null) ? sellsCount.toString() : (elTF.sells.textContent || "—");
 
   } catch (e) {
     console.error("updateTimeframe failed:", e);
-    // keep UI unchanged on error
+    // keep UI unchanged on errors
   }
 }
 // --- CHANGED END ---
@@ -914,12 +1034,9 @@ async function updateTabPercents(){
   try {
     const dex = await fetchDexPair();
     const raw = dex?.raw?.pair || dex?.raw?.pairs?.[0] || null;
-    // try multiple possible shapes
     const pcp = raw?.priceChange || raw?.price_change || raw?.priceChangePercent || raw?.price_change_percent || raw?.price_changes || raw?.price_change || {};
-
     const pickRaw = (obj, key) => {
       if (!obj) return null;
-      // handle nested object e.g. { m5: 0.05 } or { '24h': 5 }
       if (obj[key] != null) return obj[key];
       if (obj[key.toLowerCase()] != null) return obj[key.toLowerCase()];
       if (obj[key.toUpperCase()] != null) return obj[key.toUpperCase()];
@@ -931,7 +1048,6 @@ async function updateTabPercents(){
       if (!el) return;
       const n = normalizePctValue(rawVal);
       if (n == null || !isFinite(n)) {
-        // leave existing or default to 0%
         if (!el.textContent) el.textContent = "0%";
         el.classList.remove("pct-pos","pct-neg");
         return;
@@ -942,7 +1058,6 @@ async function updateTabPercents(){
       el.classList.toggle("pct-neg", n < 0);
     };
 
-    // try to find each timeframe percent
     setPctEl("pct-m5",  pickRaw(pcp,'m5')  ?? pickRaw(raw,'m5') ?? pickRaw(raw,'5m'));
     setPctEl("pct-m15", pickRaw(pcp,'m15') ?? pickRaw(raw,'m15') ?? pickRaw(raw,'15m'));
     setPctEl("pct-m30", pickRaw(pcp,'m30') ?? pickRaw(raw,'m30') ?? pickRaw(raw,'30m'));

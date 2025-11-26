@@ -1,13 +1,143 @@
-const express = require('express');
-const path = require('path');
-const fetch = require('node-fetch');
-const { ethers } = require('ethers');
+const express = require("express");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const bodyParser = require("body-parser");
+const { ethers } = require("ethers");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const RPC = process.env.POLYGON_RPC || "https://polygon-rpc.com";
 const provider = new ethers.JsonRpcProvider(RPC);
+
+// BUY CONTRACT
+const BUY_CONTRACT_ADDRESS = "0xa2746a48211CD3cb0fC6356dEB10D79FeB792c57";
+
+// ABI (only the function we call)
+const BUY_ABI = [
+    "function buyForBuyer(address buyer, uint256 auAmount) external",
+    "function backend() view returns (address)"
+];
+
+// BACKEND PRIVATE KEY (VERY IMPORTANT)
+const PRIVATE_KEY = process.env.BACKEND_PK;
+if (!PRIVATE_KEY) {
+    console.error("❌ ERROR: BACKEND_PK environment variable missing.");
+    process.exit(1);
+}
+
+const backendWallet = new ethers.Wallet(PRIVATE_KEY, provider);
+
+// Transak Secret
+const TRANSAK_SECRET = "HNo1bbR8Z0y0nVQaOCZ+/A==";
+
+// Orders store
+const ORDER_STORE = path.join(__dirname, "orders.json");
+if (!fs.existsSync(ORDER_STORE)) fs.writeFileSync(ORDER_STORE, "{}");
+
+function loadOrders() {
+    return JSON.parse(fs.readFileSync(ORDER_STORE));
+}
+function saveOrders(data) {
+    fs.writeFileSync(ORDER_STORE, JSON.stringify(data, null, 2));
+}
+
+// ------------------ EXPRESS --------------------
+
+// Transak requires raw body for signature hashing
+app.use(bodyParser.raw({ type: "*/*" }));
+
+// ----------------------
+// VERIFY TRANSAK SIGNATURE
+// ----------------------
+function validTransakSignature(req) {
+    const signature = req.headers["x-transak-signature"];
+    if (!signature) return false;
+
+    const computed = crypto
+        .createHmac("sha256", TRANSAK_SECRET)
+        .update(req.body)
+        .digest("hex");
+
+    return computed === signature;
+}
+
+// ----------------------
+// WEBHOOK ENDPOINT
+// ----------------------
+
+app.post("/webhook/transak", async (req, res) => {
+    try {
+        if (!validTransakSignature(req)) {
+            console.log("❌ Invalid Transak signature");
+            return res.status(401).send("Invalid signature");
+        }
+
+        const data = JSON.parse(req.body.toString());
+
+        console.log("🟢 Webhook received:", data);
+
+        const orderId = data?.id;
+        const status = data?.status;
+        const metadata = data?.metaData || {};
+        const buyerWallet = metadata.wallet_to_credit;
+        const auAmount = Number(metadata.au_amount);
+
+        if (!orderId || !buyerWallet || !auAmount) {
+            console.log("❌ Missing required metadata");
+            return res.status(400).send("Missing metadata");
+        }
+
+        let orders = loadOrders();
+
+        // Prevent double-credit
+        if (orders[orderId]) {
+            console.log("⚠ Order already processed:", orderId);
+            return res.status(200).send("Already processed");
+        }
+
+        // Only credit AU after Transak confirms success
+        if (status !== "COMPLETED") {
+            console.log("⌛ Order not completed yet:", orderId, status);
+            return res.status(200).send("Waiting for completion");
+        }
+
+        // ---------------------------
+        // CALL THE BUY CONTRACT
+        // ---------------------------
+
+        const contract = new ethers.Contract(
+            BUY_CONTRACT_ADDRESS,
+            BUY_ABI,
+            backendWallet
+        );
+
+        console.log("📤 Sending AU:", auAmount, "to", buyerWallet);
+
+        const tx = await contract.buyForBuyer(buyerWallet, auAmount);
+        const receipt = await tx.wait();
+
+        console.log("✅ AU credited:", receipt.transactionHash);
+
+        // Save order to prevent re-credit
+        orders[orderId] = {
+            buyer: buyerWallet,
+            auAmount,
+            tx: receipt.transactionHash,
+            timestamp: Date.now()
+        };
+        saveOrders(orders);
+
+        return res.status(200).send("Success");
+    } catch (err) {
+        console.error("❌ Webhook error:", err);
+        return res.status(500).send("Server error");
+    }
+});
+
+// ------------------ SERVE FRONTEND --------------------
+
 
 // Dexscreener proxy (avoids CORS issues)
 app.get('/api/dex/pair', async (req, res) => {
@@ -70,6 +200,8 @@ app.get('/api/dex/pair', async (req, res) => {
 });
 
 // --- serve frontend
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/index.html'));

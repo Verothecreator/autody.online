@@ -1,7 +1,16 @@
+let CONFIG;
+
+async function loadConfig() {
+    const res = await fetch("/config");
+    CONFIG = await res.json();
+}
+
+await loadConfig();
+
+
 // ===== Join Community (Google Sheets via JSONP, with status messages) =====
 document.addEventListener("DOMContentLoaded", () => {
-  const APPS_SCRIPT_URL =
-    "https://script.google.com/macros/s/AKfycbz4OoId6YfogVy_VSoMWM7HR84amjlGb0NZZ9l6lmU1EIjeMw6D7fnbKDBEmvuVF89UYQ/exec";
+  const APPS_SCRIPT_URL =config.google.sheetUrl
 
   const joinBtn    = document.getElementById("join-community-btn");
   const joinPopup  = document.getElementById("join-popup");
@@ -249,7 +258,7 @@ async function ensureWalletConnectReady() {
 
   if (!wcUniversalProvider) {
     wcUniversalProvider = await Universal.init({
-      projectId: "69e2560c7b637bd282fec177545d8036", // ✅ your real projectId
+      projectId: "config.walletconnect.projectId", // ✅ your real projectId
       metadata: {
         name: "Autody",
         description: "Autody Token Sale",
@@ -261,7 +270,7 @@ async function ensureWalletConnectReady() {
 
   if (!wcModal) {
     wcModal = new ModalLib({
-      projectId: "69e2560c7b637bd282fec177545d8036",
+      projectId: "config.walletconnect.projectId",
       themeMode: "light",
       themeVariables: { "--wcm-z-index": "3000" }
     });
@@ -340,7 +349,7 @@ function launchTransak() {
   }
 
   const transak = new TransakSDK.default({
-    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676",  // replace with your live key in production
+    apiKey: CONFIG.transak.apiKey,  // replace with your live key in production
     environment: "STAGING", // change to "PRODUCTION" later
     defaultCryptoCurrency: "AUTODY",
     fiatCurrency: "USD",
@@ -376,7 +385,7 @@ function openTransakWidget() {
 
     // Create Transak instance
     const transak = new TransakSDK({
-        apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", // or your test key
+        apiKey: CONFIG.transak.apiKey, // or your test key
         environment: "PRODUCTION", // or "STAGING"
         widgetHeight: "600px",
         widgetWidth: "400px",
@@ -387,7 +396,7 @@ function openTransakWidget() {
         fiatCurrency: "USD",
         cryptoCurrency: "USDT",                    // what transak sends
         network: "polygon",
-        payoutAddress: "0xE07DFB3f6eD64bAD34466E23E484d37C00b5E972",  // vault where USDT goes
+        payoutAddress: "config.vaultAddress",  // vault where USDT goes
         themeColor: "#000000",
 
         // IMPORTANT – pass metadata (your AU amount)
@@ -428,11 +437,15 @@ document.getElementById("buy-btn").addEventListener("click", openTransakWidget);
 const usdInput   = document.getElementById("usdAmount");
 const tokenInput = document.getElementById("tokenAmount");
 
-const AUTODY_ADDRESS = "0xa2746a48211cd3cb0fc6356deb10d79feb792c57".toLowerCase(); // new Polygon contract (lowercased)
+const AUTODY_ADDRESS = config.tokenContract; // new Polygon contract (lowercased)
 const NETWORK_SLUG   = "polygon_pos";   // legacy slug (kept for compatibility)
-const POOL_ADDRESS   = "0x30dA748C76D1c87b2893035b60fDc50a31439d8D"; // pair identifier used by Dexscreener proxy
-
-const POLYGON_RPC = "https://polygon-rpc.com"; // read-only JSON-RPC endpoint
+const POOL_ADDRESS = config.poolAddress; // pair identifier used by Dexscreener proxy
+const POLYGON_RPC = config.rpc; // read-only JSON-RPC endpoint
+const vaultAddress = config.vaultAddress;
+const wcProjectId = config.walletconnect.projectId;
+const transakApiKey = config.transak.apiKey;
+const transakEnv = config.transak.environment;
+const APPS_SCRIPT_URL = config.google.sheetUrl;
 
 const ABI_V3 = [
   "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 obsIndex,uint16 obsCardinality,uint16 obsCardinalityNext,uint8 feeProtocol,bool unlocked)",

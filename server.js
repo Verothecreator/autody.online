@@ -6,13 +6,13 @@ const bodyParser = require("body-parser");
 const { ethers } = require("ethers");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 
-const RPC = process.env.POLYGON_RPC || "https://polygon-rpc.com";
+const RPC = process.env.POLYGON_RPC;
 const provider = new ethers.JsonRpcProvider(RPC);
 
 // BUY CONTRACT
-const BUY_CONTRACT_ADDRESS = "0xa2746a48211CD3cb0fC6356dEB10D79FeB792c57";
+const BUY_CONTRACT_ADDRESS = process.env.BUY_CONTRACT_ADDRESS;
 
 // ABI (only the function we call)
 const BUY_ABI = [
@@ -30,7 +30,7 @@ if (!PRIVATE_KEY) {
 const backendWallet = new ethers.Wallet(PRIVATE_KEY, provider);
 
 // Transak Secret
-const TRANSAK_SECRET = "HNo1bbR8Z0y0nVQaOCZ+/A==";
+const TRANSAK_SECRET = process.env.TRANSAK_SECRET;
 
 // Orders store
 const ORDER_STORE = path.join(__dirname, "orders.json");

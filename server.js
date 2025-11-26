@@ -64,6 +64,7 @@ function validTransakSignature(req) {
     return computed === signature;
 }
 
+
 // ----------------------
 // WEBHOOK ENDPOINT
 // ----------------------
@@ -201,6 +202,30 @@ app.get('/api/dex/pair', async (req, res) => {
 });
 
 // --- serve frontend
+
+app.get("/config", (req, res) => {
+    return res.json({
+        rpc: process.env.POLYGON_RPC,
+
+        tokenContract: process.env.TOKEN_CONTRACT,
+        poolAddress: process.env.POOL_ADDRESS,
+        vaultAddress: process.env.VAULT_ADDRESS,
+
+        walletconnect: {
+            projectId: process.env.WALLETCONNECT_PROJECT_ID
+        },
+
+        transak: {
+            apiKey: process.env.TRANSAK_API_KEY,
+            environment: process.env.TRANSAK_ENV
+        },
+
+        google: {
+            sheetUrl: process.env.GOOGLE_SHEET_URL
+        }
+    });
+});
+
 
 
 app.use(express.static(path.join(__dirname, 'public')));

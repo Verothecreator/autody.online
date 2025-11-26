@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const bodyParser = require("body-parser");
 const { ethers } = require("ethers");
+require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT;

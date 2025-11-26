@@ -1,11 +1,4 @@
-let CONFIG;
-
-async function loadConfig() {
-    const res = await fetch("/config");
-    CONFIG = await res.json();
-}
-
-await loadConfig();
+const config = await fetch("/config").then(r => r.json());
 
 
 // ===== Join Community (Google Sheets via JSONP, with status messages) =====

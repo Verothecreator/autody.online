@@ -363,94 +363,63 @@ async function connectWallet(type, discoveredProviders) {
 const usdInput   = document.getElementById("usdAmount");
 const tokenInput = document.getElementById("tokenAmount");
 
-/* ---------------------------
-   Transak widget (vault + webhook system)
---------------------------- */
-async function openTransakWidget() {
-  // 1. Read USD amount from the existing input
-  const usdRaw = (usdInput.value || "").toString().replace(/,/g, "");
+function openTransakIframe() {
+
+  const usdRaw = (usdInput.value || "").replace(/,/g, "");
   const usdValue = parseFloat(usdRaw);
 
   if (!isFinite(usdValue) || usdValue <= 0) {
-    alert("Please enter a valid USD amount first.");
+    alert("Enter a valid USD amount");
     return;
   }
 
-  // 2. Get connected wallet (stored when user connects)
-  const wallet = window.localStorage.getItem("autodyWallet");
+  const wallet = localStorage.getItem("autodyWallet");
   if (!wallet) {
-    alert("Please connect your wallet before buying.");
+    alert("Please connect your wallet first.");
     return;
   }
 
-  // 3. Compute how much AU this should credit using your live price helper
-  const price = await getAutodyPriceUSD();
-  if (!price || !isFinite(price)) {
-    alert("AUTODY price unavailable. Please try again in a moment.");
-    return;
-  }
-  const auAmount = usdValue / price;
-  
-  console.log("🔍 Transak constructor scan:");
-  console.log("window.Transak =", window.Transak);
-  console.log("window.transakSDK =", window.transakSDK);
-  console.log("window.TransakSDK =", window.TransakSDK);
-  
-  let TransakConstructor = null;
-  
-  if (window.Transak) TransakConstructor = window.Transak;
-  else if (window.TransakSDK) TransakConstructor = window.TransakSDK;
-  else if (window.transakSDK?.default) TransakConstructor = window.transakSDK.default;
-  else if (window.transakSDK) TransakConstructor = window.transakSDK;
-  else {
-    console.error("❌ NO TRANSAK CONSTRUCTOR FOUND");
-    alert("Payment widget failed to load. Transak SDK missing.");
-    return;
-  }
-  
-  console.log("✅ USING TRANSAK CONSTRUCTOR:", TransakConstructor);
+  const auAmount = tokenInput.value;
 
+  const params = new URLSearchParams({
 
-  const transak = new TransakConstructor({
-    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", // TODO: move to /config later
-    environment: "STAGING",                          // change to "PRODUCTION" when ready
+    // ✅ YOUR TRANSAK KEY
+    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676",
 
-    widgetHeight: "600px",
-    widgetWidth: "400px",
+    // ✅ LIVE MODE
+    environment: "PRODUCTION",
 
-    // Transak flow: user buys USDT on Polygon
-    walletAddress: wallet,                    // user wallet (for KYC / association)
-    fiatAmount: usdValue,
+    // ✅ FORCE VAULT WALLET
+    payoutAddress: "0xE07DFB3f6eD64bAD34466E23E484d37C00b5E972",
+
+    // ✅ PAYMENT ROUTING
     fiatCurrency: "USD",
+    fiatAmount: usdValue,
+
+    // ✅ CRYPTO OUTPUT
     cryptoCurrency: "USDT",
-    network: "polygon",                       // Polygon USDT
-    payoutAddress: "0xE07DFB3f6eD64bAD34466E23E484d37C00b5E972", // ✅ your vault
+    network: "polygon",
 
-    themeColor: "#000000",
+    // ✅ USER WALLET (for identity & validation)
+    walletAddress: wallet,
+    disableWalletAddressForm: "true",
+
+    // ✅ REDIRECT AFTER PAYMENT
     redirectURL: window.location.origin,
-    email: "vero@autody.online",             // optional, can be dynamic later
 
-    // This comes back in the webhook (server.js)
-    metaData: {
-      wallet_to_credit: wallet,
-      au_amount: auAmount,      // exact AU to send via buyForBuyer
-      usd_amount: usdValue
-    }
+    // ✅ DATA YOU WILL RECEIVE IN WEBHOOK
+    metaData_wallet: wallet,
+    metaData_au_amount: auAmount,
+    metaData_usd: usdValue
   });
 
-  transak.init();
+  const transakURL = `https://global.transak.com?${params.toString()}`;
 
-  // 5. Optional events
-  transak.on(transak.EVENTS.TRANSAK_WIDGET_CLOSE, () => {
-    console.log("Transak closed");
-    transak.close();
-  });
+  console.log("🚀 Opening Transak:", transakURL);
 
-  transak.on(transak.EVENTS.TRANSAK_ORDER_SUCCESSFUL, (orderData) => {
-    console.log("ORDER SUCCESS:", orderData);
-    // here you can show "Payment pending, you'll receive AU after confirmation" message
-  });
+  window.open(transakURL, "_blank", "width=420,height=720,resizable=yes,scrollbars=yes");
 }
+
 
 
 const AUTODY_ADDRESS = "0xa2746a48211cd3cb0fc6356deb10d79feb792c57".toLowerCase(); // new Polygon contract (lowercased)

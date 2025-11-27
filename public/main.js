@@ -1,4 +1,3 @@
-
 // ===== Join Community (Google Sheets via JSONP, with status messages) =====
 document.addEventListener("DOMContentLoaded", () => {
   const APPS_SCRIPT_URL =
@@ -201,6 +200,13 @@ document.addEventListener("DOMContentLoaded", () => {
 /* ---------------------------
    Wallet helpers, WalletConnect, Transak (unchanged)
 --------------------------- */
+
+/* ===== PRICE CACHE ===== */
+let cachedPriceUSD = null;
+let lastPriceTs = 0;
+const PRICE_TTL_MS = 10_000;
+
+
 function findInjectedFor(type, discoveredProviders) {
   const NAME_MAP = {
     metamask:   ["MetaMask"],
@@ -603,10 +609,6 @@ async function convertQuoteToUSD(amount, unitSymbol) {
   }
 }
 
-/* ===== Price helpers + caching (kept — used by buy widget) ===== */
-let cachedPriceUSD = null;
-let lastPriceTs    = 0;
-const PRICE_TTL_MS = 10_000;
 
 async function fetchPriceFromGeckoSimple() {
   const url = `https://api.geckoterminal.com/api/v2/simple/networks/${NETWORK_SLUG}/token_price/${AUTODY_ADDRESS}`;

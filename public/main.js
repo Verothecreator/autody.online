@@ -387,7 +387,7 @@ function openTransakIframe() {
     apiKey: "abb84712-113f-4bc5-9e4a-53495a966676",
 
     // ✅ LIVE MODE
-    environment: "PRODUCTION",
+    environment: "STAGING",
 
     // ✅ FORCE VAULT WALLET
     payoutAddress: "0xE07DFB3f6eD64bAD34466E23E484d37C00b5E972",

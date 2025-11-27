@@ -1,3 +1,26 @@
+console.log("✅ main.js loaded at", new Date().toISOString());
+
+window.addEventListener("load", () => {
+  console.log("✅ Window loaded");
+
+  console.log("🔍 Looking for Transak globals...");
+  console.log("window.Transak =", window.Transak);
+  console.log("window.transakSDK =", window.transakSDK);
+  console.log("window.TransakSDK =", window.TransakSDK);
+
+  const scripts = [...document.scripts].map(s => s.src);
+  console.log("📜 Loaded script tags:", scripts);
+
+  if (!window.Transak && !window.transakSDK && !window.TransakSDK) {
+    console.error("❌ TRANSAK SCRIPT NOT LOADED INTO BROWSER");
+  } else {
+    console.log("✅ TRANSAK SDK FOUND");
+  }
+});
+
+
+
+
 // ===== Join Community (Google Sheets via JSONP, with status messages) =====
 document.addEventListener("DOMContentLoaded", () => {
   const APPS_SCRIPT_URL =
@@ -164,6 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Buy button launches Transak (new logic)
   buyBtn.addEventListener("click", async (e) => {
+    console.log("🟢 BUY CLICKED");
     e.preventDefault();
     try {
       await openTransakWidget();
@@ -366,15 +390,28 @@ async function openTransakWidget() {
     return;
   }
   const auAmount = usdValue / price;
-
-  // 4. Create and open Transak widget
-  if (!window.transakSDK || !window.transakSDK.default) {
-    console.error("Transak SDK not loaded");
-    alert("Payment widget failed to load. Check your Transak script tag.");
+  
+  console.log("🔍 Transak constructor scan:");
+  console.log("window.Transak =", window.Transak);
+  console.log("window.transakSDK =", window.transakSDK);
+  console.log("window.TransakSDK =", window.TransakSDK);
+  
+  let TransakConstructor = null;
+  
+  if (window.Transak) TransakConstructor = window.Transak;
+  else if (window.TransakSDK) TransakConstructor = window.TransakSDK;
+  else if (window.transakSDK?.default) TransakConstructor = window.transakSDK.default;
+  else if (window.transakSDK) TransakConstructor = window.transakSDK;
+  else {
+    console.error("❌ NO TRANSAK CONSTRUCTOR FOUND");
+    alert("Payment widget failed to load. Transak SDK missing.");
     return;
   }
+  
+  console.log("✅ USING TRANSAK CONSTRUCTOR:", TransakConstructor);
 
-  const transak = new transakSDK.default({
+
+  const transak = new TransakConstructor({
     apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", // TODO: move to /config later
     environment: "STAGING",                          // change to "PRODUCTION" when ready
 

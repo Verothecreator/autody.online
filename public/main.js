@@ -608,6 +608,76 @@ const fmtUSD  = (n, fd=0)=> (n==null||!isFinite(n)) ? "—"
   : new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:fd}).format(n);
 const fmtUSDc = (n)=>fmtUSD(n,6);
 
+// ------------------------------
+// TRANSak WIDGET LAUNCH FUNCTION
+// ------------------------------
+
+function openTransakWidget() {
+    if (!window.connectedWallet) {
+        alert("Please connect your wallet first.");
+        return;
+    }
+
+    const buyAmountUSD = parseFloat(buyInput.value);
+    if (!buyAmountUSD || buyAmountUSD <= 0) {
+        alert("Enter a valid amount.");
+        return;
+    }
+
+    // Calculate AU amount (your formula)
+    const auAmount = buyAmountUSD * AU_RATE;
+    selectedAU.textContent = auAmount.toFixed(2);
+
+    // Create Transak instance
+    const transak = new TransakSDK({
+        apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", // or your test key
+        environment: "PRODUCTION", // or "STAGING"
+        widgetHeight: "600px",
+        widgetWidth: "400px",
+        
+        // REQUIRED PARAMETERS
+        walletAddress: window.connectedWallet,      // user's wallet
+        fiatAmount: buyAmountUSD,                  // user's USD input
+        fiatCurrency: "USD",
+        cryptoCurrency: "USDT",                    // what transak sends
+        network: "polygon",
+        payoutAddress: "0xE07DFB3f6eD64bAD34466E23E484d37C00b5E972",  // vault where USDT goes
+        themeColor: "#000000",
+
+        // IMPORTANT – pass metadata (your AU amount)
+        redirectURL: "https://autody-online.onrender.com",
+        email: "vero@autody.online",
+
+        // This metadata comes back in your webhook
+        metaData: {
+            wallet_to_credit: window.connectedWallet,
+            au_amount: auAmount,
+            usd_amount: buyAmountUSD
+        }
+    });
+
+    // OPEN widget
+    transak.init();
+
+    // Listen for events
+    transak.on(transak.EVENTS.TRANSAK_WIDGET_CLOSE, () => {
+        console.log("Transak closed");
+        transak.close();
+    });
+
+    transak.on(transak.EVENTS.TRANSAK_ORDER_SUCCESSFUL, (orderData) => {
+        console.log("ORDER SUCCESS:", orderData);
+    });
+}
+
+// ------------------------------
+// ADD CLICK EVENT TO BUY BUTTON
+// ------------------------------
+document.getElementById("buy-btn").addEventListener("click", openTransakWidget);
+
+
+
+
 /* -----------------------
    Dexscreener integration
    (proxy endpoint: /api/dex/pair?pair=<POOL_ADDRESS>)

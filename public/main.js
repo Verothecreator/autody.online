@@ -190,7 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("🟢 BUY CLICKED");
     e.preventDefault();
     try {
-      await openTransakWidget();
+      await openTransakIframe();
     } catch (err) {
       console.error("Transak widget failed:", err);
       alert("Something went wrong launching the payment widget. Please try again.");

@@ -163,10 +163,15 @@ document.addEventListener("DOMContentLoaded", () => {
     walletStep.style.display = "block";
   });
 
-  // Buy button launches Transak
-  buyBtn.addEventListener("click", (e) => {
+  // Buy button launches Transak (new logic)
+  buyBtn.addEventListener("click", async (e) => {
     e.preventDefault();
-    launchTransak();
+    try {
+      await openTransakWidget();
+    } catch (err) {
+      console.error("Transak widget failed:", err);
+      alert("Something went wrong launching the payment widget. Please try again.");
+    }
   });
 
   // Wallet connect logic (per-button)
@@ -322,11 +327,79 @@ async function connectWallet(type, discoveredProviders) {
   return await connectViaWalletConnect();
 }
 
+// ------------------------------
+// TRANSak WIDGET LAUNCH FUNCTION
+// ------------------------------
+
+function openTransakWidget() {
+    if (!window.connectedWallet) {
+        alert("Please connect your wallet first.");
+        return;
+    }
+
+    const buyAmountUSD = parseFloat(buyInput.value);
+    if (!buyAmountUSD || buyAmountUSD <= 0) {
+        alert("Enter a valid amount.");
+        return;
+    }
+
+    // Calculate AU amount (your formula)
+    const auAmount = buyAmountUSD * AU_RATE;
+    selectedAU.textContent = auAmount.toFixed(2);
+
+    // Create Transak instance
+    const transak = new TransakSDK({
+        apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", // or your test key
+        environment: "PRODUCTION", // or "STAGING"
+        widgetHeight: "600px",
+        widgetWidth: "400px",
+        
+        // REQUIRED PARAMETERS
+        walletAddress: window.connectedWallet,      // user's wallet
+        fiatAmount: buyAmountUSD,                  // user's USD input
+        fiatCurrency: "USD",
+        cryptoCurrency: "USDT",                    // what transak sends
+        network: "polygon",
+        payoutAddress: "0xE07DFB3f6eD64bAD34466E23E484d37C00b5E972",  // vault where USDT goes
+        themeColor: "#000000",
+
+        // IMPORTANT – pass metadata (your AU amount)
+        redirectURL: "https://autody-online.onrender.com",
+        email: "vero@autody.online",
+
+        // This metadata comes back in your webhook
+        metaData: {
+            wallet_to_credit: window.connectedWallet,
+            au_amount: auAmount,
+            usd_amount: buyAmountUSD
+        }
+    });
+
+    // OPEN widget
+    transak.init();
+
+    // Listen for events
+    transak.on(transak.EVENTS.TRANSAK_WIDGET_CLOSE, () => {
+        console.log("Transak closed");
+        transak.close();
+    });
+
+    transak.on(transak.EVENTS.TRANSAK_ORDER_SUCCESSFUL, (orderData) => {
+        console.log("ORDER SUCCESS:", orderData);
+    });
+}
+
+// ------------------------------
+// ADD CLICK EVENT TO BUY BUTTON
+// ------------------------------
+document.getElementById("buy-btn").addEventListener("click", openTransakWidget);
+
 /* ---------------------------
-   Transak
+   Transak widget (vault + webhook system)
 --------------------------- */
-function launchTransak() {
-  const usdRaw = (document.getElementById("usdAmount").value || "").toString().replace(/,/g, "");
+async function openTransakWidget() {
+  // 1. Read USD amount from the existing input
+  const usdRaw = (usdInput.value || "").toString().replace(/,/g, "");
   const usdValue = parseFloat(usdRaw);
 
   if (!isFinite(usdValue) || usdValue <= 0) {
@@ -334,26 +407,70 @@ function launchTransak() {
     return;
   }
 
-  const wallet = window.localStorage.getItem("autodyWallet") || "";
+  // 2. Get connected wallet (stored when user connects)
+  const wallet = window.localStorage.getItem("autodyWallet");
   if (!wallet) {
     alert("Please connect your wallet before buying.");
     return;
   }
 
-  const transak = new TransakSDK.default({
-    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676",  // replace with your live key in production
-    environment: "STAGING", // change to "PRODUCTION" later
-    defaultCryptoCurrency: "AUTODY",
+  // 3. Compute how much AU this should credit using your live price helper
+  const price = await getAutodyPriceUSD();
+  if (!price || !isFinite(price)) {
+    alert("AUTODY price unavailable. Please try again in a moment.");
+    return;
+  }
+  const auAmount = usdValue / price;
+
+  // 4. Create and open Transak widget
+  if (!window.transakSDK || !window.transakSDK.default) {
+    console.error("Transak SDK not loaded");
+    alert("Payment widget failed to load. Check your Transak script tag.");
+    return;
+  }
+
+  const transak = new transakSDK.default({
+    apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", // TODO: move to /config later
+    environment: "STAGING",                          // change to "PRODUCTION" when ready
+
+    widgetHeight: "600px",
+    widgetWidth: "400px",
+
+    // Transak flow: user buys USDT on Polygon
+    walletAddress: wallet,                    // user wallet (for KYC / association)
+    fiatAmount: usdValue,
     fiatCurrency: "USD",
-    fiatAmount: usdValue,   // ✅ pre-fill USD amount
-    walletAddress: wallet,  // ✅ auto-send to connected wallet
-    themeColor: "007bff",
-    hostURL: window.location.origin,
-    redirectURL: window.location.href
+    cryptoCurrency: "USDT",
+    network: "polygon",                       // Polygon USDT
+    payoutAddress: "0xE07DFB3f6eD64bAD34466E23E484d37C00b5E972", // ✅ your vault
+
+    themeColor: "#000000",
+    redirectURL: window.location.origin,
+    email: "vero@autody.online",             // optional, can be dynamic later
+
+    // This comes back in the webhook (server.js)
+    metaData: {
+      wallet_to_credit: wallet,
+      au_amount: auAmount,      // exact AU to send via buyForBuyer
+      usd_amount: usdValue
+    }
   });
 
   transak.init();
+
+  // 5. Optional events
+  transak.on(transak.EVENTS.TRANSAK_WIDGET_CLOSE, () => {
+    console.log("Transak closed");
+    transak.close();
+  });
+
+  transak.on(transak.EVENTS.TRANSAK_ORDER_SUCCESSFUL, (orderData) => {
+    console.log("ORDER SUCCESS:", orderData);
+    // here you can show "Payment pending, you'll receive AU after confirmation" message
+  });
 }
+
+
 
 /* ---------------------------
    Live USD → AUTODY converter (unchanged)
@@ -607,75 +724,6 @@ async function warmPriceCache() {
 const fmtUSD  = (n, fd=0)=> (n==null||!isFinite(n)) ? "—"
   : new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:fd}).format(n);
 const fmtUSDc = (n)=>fmtUSD(n,6);
-
-// ------------------------------
-// TRANSak WIDGET LAUNCH FUNCTION
-// ------------------------------
-
-function openTransakWidget() {
-    if (!window.connectedWallet) {
-        alert("Please connect your wallet first.");
-        return;
-    }
-
-    const buyAmountUSD = parseFloat(buyInput.value);
-    if (!buyAmountUSD || buyAmountUSD <= 0) {
-        alert("Enter a valid amount.");
-        return;
-    }
-
-    // Calculate AU amount (your formula)
-    const auAmount = buyAmountUSD * AU_RATE;
-    selectedAU.textContent = auAmount.toFixed(2);
-
-    // Create Transak instance
-    const transak = new TransakSDK({
-        apiKey: "abb84712-113f-4bc5-9e4a-53495a966676", // or your test key
-        environment: "PRODUCTION", // or "STAGING"
-        widgetHeight: "600px",
-        widgetWidth: "400px",
-        
-        // REQUIRED PARAMETERS
-        walletAddress: window.connectedWallet,      // user's wallet
-        fiatAmount: buyAmountUSD,                  // user's USD input
-        fiatCurrency: "USD",
-        cryptoCurrency: "USDT",                    // what transak sends
-        network: "polygon",
-        payoutAddress: "0xE07DFB3f6eD64bAD34466E23E484d37C00b5E972",  // vault where USDT goes
-        themeColor: "#000000",
-
-        // IMPORTANT – pass metadata (your AU amount)
-        redirectURL: "https://autody-online.onrender.com",
-        email: "vero@autody.online",
-
-        // This metadata comes back in your webhook
-        metaData: {
-            wallet_to_credit: window.connectedWallet,
-            au_amount: auAmount,
-            usd_amount: buyAmountUSD
-        }
-    });
-
-    // OPEN widget
-    transak.init();
-
-    // Listen for events
-    transak.on(transak.EVENTS.TRANSAK_WIDGET_CLOSE, () => {
-        console.log("Transak closed");
-        transak.close();
-    });
-
-    transak.on(transak.EVENTS.TRANSAK_ORDER_SUCCESSFUL, (orderData) => {
-        console.log("ORDER SUCCESS:", orderData);
-    });
-}
-
-// ------------------------------
-// ADD CLICK EVENT TO BUY BUTTON
-// ------------------------------
-document.getElementById("buy-btn").addEventListener("click", openTransakWidget);
-
-
 
 
 /* -----------------------

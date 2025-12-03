@@ -760,11 +760,12 @@ function normalizeWindowObj(rawObj) {
 
 function normalizePctValue(raw) {
   if (raw == null) return null;
+
   const n = Number(raw);
   if (!isFinite(n)) return null;
-  if (Math.abs(n) <= 1.5) return n * 100;
   return n;
 }
+
 // --- CHANGED END ---
 
 

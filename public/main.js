@@ -951,30 +951,6 @@ async function updateTimeframe(winKey){
     // Primary try
     let windowObj = getWindowObj(candidates[0]) || getWindowObj(candidates[1]);
 
-    // If user requested m15/m30 and upstream missing, compute from m5
-    if (canonical === 'm15' || canonical === 'm30') {
-      const m5obj = getWindowObj('5m') || getWindowObj('m5');
-      if (m5obj) {
-        const factor = (canonical === 'm15') ? 3 : 6;
-        windowObj = multiplyTxnsObj(m5obj, factor);
-        // if m5 provided buysUsd/sellsUsd, also scale them
-        if (m5obj.buysUsd != null || m5obj.sellsUsd != null) {
-          windowObj.buysUsd = isFinite(Number(m5obj.buysUsd)) ? Number(m5obj.buysUsd) * factor : undefined;
-          windowObj.sellsUsd = isFinite(Number(m5obj.sellsUsd)) ? Number(m5obj.sellsUsd) * factor : undefined;
-        }
-      } else {
-        // fallback: scale from 1h
-        const h1 = getWindowObj('1h') || getWindowObj('h1');
-        if (h1) {
-          const factor = (canonical === 'm15') ? (15/60) : (30/60);
-          windowObj = multiplyTxnsObj(h1, factor);
-          if (h1.buysUsd != null || h1.sellsUsd != null) {
-            windowObj.buysUsd = isFinite(Number(h1.buysUsd)) ? Number(h1.buysUsd) * factor : undefined;
-            windowObj.sellsUsd = isFinite(Number(h1.sellsUsd)) ? Number(h1.sellsUsd) * factor : undefined;
-          }
-        }
-      }
-    }
 
     // If still missing, try other fallbacks
     if (!windowObj) {

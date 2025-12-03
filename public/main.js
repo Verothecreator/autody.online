@@ -852,16 +852,12 @@ async function updateTimeframe(winKey){
   try {
     const map = {
       "m5": ['5m','m5'],
-      "m15": ['m15','15m'],
-      "m30": ['m30','30m'],
       "h1": ['1h','h1'],
       "h6": ['6h','h6'],
       "h24": ['24h','h24']
     };
     const canonical = {
       "5m":"m5","m5":"m5","M5":"m5",
-      "15m":"m15","m15":"m15","M15":"m15",
-      "30m":"m30","m30":"m30","M30":"m30",
       "1h":"h1","h1":"h1","H1":"h1",
       "6h":"h6","h6":"h6","H6":"h6",
       "24h":"h24","h24":"h24","H24":"h24"
@@ -1079,8 +1075,6 @@ document.addEventListener("DOMContentLoaded", wireTabs);
 ----------------------- */
 const WIN_DEFS = {
   m5:  { mins: 5,   pctKey: "m5",  label: "5M"  },
-  m15: { mins: 15,  pctKey: "m15", label: "15m" },
-  m30: { mins: 30,  pctKey: "m30", label: "30m" },
   h1:  { mins: 60,  pctKey: "h1",  label: "1H"  },
   h6:  { mins: 360, pctKey: "h6",  label: "6H"  },
   h24: { mins: 1440,pctKey: "h24", label: "24H" },
@@ -1119,8 +1113,6 @@ async function updateTabPercents(){
     };
 
     setPctEl("pct-m5",  pickRaw(pcp,'m5')  ?? pickRaw(raw,'m5') ?? pickRaw(raw,'5m'));
-    setPctEl("pct-m15", pickRaw(pcp,'m15') ?? pickRaw(raw,'m15') ?? pickRaw(raw,'15m'));
-    setPctEl("pct-m30", pickRaw(pcp,'m30') ?? pickRaw(raw,'m30') ?? pickRaw(raw,'30m'));
     setPctEl("pct-h1",  pickRaw(pcp,'h1')  ?? pickRaw(raw,'h1') ?? pickRaw(raw,'1h'));
     setPctEl("pct-h6",  pickRaw(pcp,'h6')  ?? pickRaw(raw,'h6') ?? pickRaw(raw,'6h'));
     setPctEl("pct-h24", pickRaw(pcp,'h24') ?? pickRaw(raw,'h24') ?? pickRaw(raw,'24h'));

@@ -598,4 +598,39 @@ h1, h2, h3 {
   }
 }
 
+/* ==================================
+   HARD FIX: MOBILE BUTTON OVERFLOW
+   ================================== */
+@media (max-width: 768px) {
+
+  /* Prevent any sideways scrolling */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Ensure section never exceeds screen width */
+  .how-to-buy,
+  .how-to-buy .container {
+    width: 100%;
+    max-width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    box-sizing: border-box;
+  }
+
+  /* Force buttons to stay inside the viewport */
+  .how-to-buy a.btn {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 0 0.8rem 0;
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  /* Last button no extra spacing */
+  .how-to-buy a.btn:last-child {
+    margin-bottom: 0;
+  }
+}
 

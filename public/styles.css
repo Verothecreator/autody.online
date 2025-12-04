@@ -560,7 +560,20 @@ h1, h2, h3 {
   }
 }
 
+/* ============================
+   FIX OVERFLOWING WALLET ADDR
+   ============================ */
+@media (max-width: 768px) {
 
+  .how-to-buy li {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
 
+  .how-to-buy {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
 
 

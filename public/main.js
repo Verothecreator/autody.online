@@ -701,7 +701,6 @@ async function fetchDexPair() {
 const elTF = {
   txn:   document.getElementById("tf-txn"),
   vol:   document.getElementById("tf-vol"),
-  net:   document.getElementById("tf-net"),
   buys:  document.getElementById("tf-buys"),
   sells: document.getElementById("tf-sells"),
 };
@@ -996,14 +995,10 @@ async function updateTimeframe(winKey){
     if (windowObj.txnCount != null && isFinite(Number(windowObj.txnCount))) txnCount = Number(windowObj.txnCount);
     if (txnCount == null && (buysCount != null || sellsCount != null)) txnCount = (buysCount||0) + (sellsCount||0);
 
-    // net buy (USD) if we have USD info
-    let netBuyUsd = null;
-    if (buysUsd != null || sellsUsd != null) netBuyUsd = (buysUsd||0) - (sellsUsd||0);
 
     // write to DOM:
     if (elTF.txn)   elTF.txn.textContent   = (txnCount != null) ? txnCount.toString() : (elTF.txn.textContent || "—");
     if (elTF.vol)   elTF.vol.textContent   = (volUsd != null) ? fmtUSD(volUsd,0) : (elTF.vol.textContent || "—");
-    if (elTF.net)   elTF.net.textContent   = (netBuyUsd != null && isFinite(netBuyUsd)) ? fmtUSD(netBuyUsd, 0) : (elTF.net.textContent || "—");
     if (elTF.buys)  elTF.buys.textContent  = (buysCount != null) ? buysCount.toString() : (elTF.buys.textContent || "—");
     if (elTF.sells) elTF.sells.textContent = (sellsCount != null) ? sellsCount.toString() : (elTF.sells.textContent || "—");
 

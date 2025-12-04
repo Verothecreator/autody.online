@@ -965,9 +965,6 @@ async function updateTimeframe(winKey){
     const buysCount = (windowObj.buys != null && isFinite(Number(windowObj.buys))) ? Math.round(Number(windowObj.buys)) : null;
     const sellsCount = (windowObj.sells != null && isFinite(Number(windowObj.sells))) ? Math.round(Number(windowObj.sells)) : null;
     // try find buysUsd/sellsUsd from several possible locations
-    let buysUsd = null, sellsUsd = null;
-    if (windowObj.buysUsd != null && isFinite(Number(windowObj.buysUsd))) buysUsd = Number(windowObj.buysUsd);
-    if (windowObj.sellsUsd != null && isFinite(Number(windowObj.sellsUsd))) sellsUsd = Number(windowObj.sellsUsd);
 
     // some sources use s.buys[k] as USD directly (we handled above) or raw shapes — attempt to pick from summary as fallback
     if (buysUsd == null && s && s.buys && s.buys[candidates[0]] != null) {

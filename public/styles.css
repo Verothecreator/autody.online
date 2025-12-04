@@ -576,4 +576,19 @@ h1, h2, h3 {
   }
 }
 
+@media (max-width: 768px) {
+
+  .how-to-buy {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+
+  .how-to-buy a.btn {
+    width: 100%;
+    margin: 0;
+    text-align: center;
+  }
+}
+
 

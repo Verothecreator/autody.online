@@ -1160,6 +1160,5 @@ function wireEnhancedTabs(){
   setInterval(()=>onSelect(currentKey), 60_000);
   setInterval(updateTabPercents, 60_000);
 }
-
 // boot enhanced tabs
 document.addEventListener("DOMContentLoaded", wireEnhancedTabs);
